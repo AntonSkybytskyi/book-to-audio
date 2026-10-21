@@ -21,7 +21,7 @@ The app has three screens: **upload**, **preview** and the **book page**, plus a
 1. **Upload.** Open the web app, upload an `.epub` or `.pdf` file and pick the language (pre-filled from detection). Nothing else is chosen in v1: the language's default voice is used at 1.0× speed.
 2. **Preview.** The app parses the book and shows title, author, cover and the list of chapters with their length. The preview is view only: chapters cannot be excluded, renamed or rearranged, and every chapter is converted. (Later: an option to check and fix chapter splitting with a local AI model, see section 15.)
 3. **Convert.** Clicking "Convert" queues the book and opens its book page.
-4. **Book page.** This is where the book is listened to and managed. It shows the book (title, author, cover, overall progress and estimated time left) and one row per chapter, which is that chapter's audio file. Each row shows its status:
+4. **Book page.** This is where the book is listened to and managed. It shows the book (title, author, cover, overall progress and estimated time left) and one row per chapter, which is that chapter's WebM audio file. Each row shows its status:
    - *queued*, *generating* (with progress) or *done*;
    - *failed*, with the error message.
 
@@ -29,10 +29,10 @@ The app has three screens: **upload**, **preview** and the **book page**, plus a
    - **play / pause** the chapter, as soon as it is done, even while other chapters are still generating. This is the whole player in v1: one play/pause button per row, and only one chapter plays at a time;
    - **regenerate** it: synthesize that chapter again with the book's settings, for example after a glitch or a failure.
 
-   At book level the user can pause and resume the conversion, regenerate the whole book, and download the M4B and the MP3 ZIP once all chapters are done. The page can be closed at any time; conversion keeps running.
+   At book level the user can pause and resume the conversion, regenerate the whole book, and download the M4B and the WebM ZIP once all chapters are done. The page can be closed at any time; conversion keeps running.
 5. **Library.** Lists all books with their status and opens a book's page. Books stay until deleted.
 
-After a chapter is regenerated, the M4B and MP3 ZIP are rebuilt from the stored chapter audio.
+After a chapter is regenerated, the M4B and WebM ZIP are rebuilt from the stored chapter audio.
 
 ## 4. Input
 
@@ -40,7 +40,7 @@ After a chapter is regenerated, the M4B and MP3 ZIP are rebuilt from the stored 
 
 v1 is delivered in two milestones:
 
-- **M1: EPUB.** The full pipeline (upload, parsing, TTS, M4B and MP3 output, UI) is built and proven with EPUB only.
+- **M1: EPUB.** The full pipeline (upload, parsing, TTS, M4B and WebM output, UI) is built and proven with EPUB only.
 - **M2: PDF.** PDF support is added on top of the working pipeline.
 
 Formats:
@@ -84,10 +84,8 @@ The text is cleaned before it is sent to TTS. None of these steps has a user set
 |---|---|---|
 | English | yes | yes |
 | Ukrainian | yes | yes |
-| Russian | yes | **no**: hidden until enabled in settings |
+| Russian | yes |
 | Other languages | later | — |
-
-Russian voices are supported but do not appear in the language list until the user turns on "Show Russian" in settings. If a book is detected as Russian while the option is off, the app says so and links to the setting.
 
 Later versions will allow any language that an installed TTS engine supports.
 
@@ -119,12 +117,14 @@ In v1 each language has one default voice, and speed is fixed at 1.0×. Later ve
 
 ## 8. Output
 
-Every conversion produces both formats:
+**Chapter audio: WebM.** Each finished chapter is stored as one WebM file with Opus audio. This is the file the book page plays (section 3), and the source that the downloads below are built from. Opus gives good speech quality at small sizes and plays natively in current Chrome, Firefox and Safari.
+
+Once all chapters are done, two downloads are available:
 
 - **M4B:** a single audiobook file with chapter markers, title, author and cover image.
-- **MP3 per chapter:** a ZIP with one MP3 per chapter, numbered in order (`01 - Chapter title.mp3`), with ID3 tags for title, author, album (book title), track number and cover.
+- **WebM per chapter:** a ZIP of the stored chapter WebM files, numbered in order (`01 - Chapter title.webm`), with title, author, album (book title) and track number in the WebM metadata. Cover art is only in the M4B.
 
-Audio is encoded with ffmpeg. Default quality: mono, 64 kbps AAC for M4B and 64 kbps MP3 (set in the configuration file, not in the UI).
+Audio is encoded with ffmpeg. Default quality: mono, 32 kbps Opus for chapter WebM files and 64 kbps AAC for M4B (set in the configuration file, not in the UI).
 
 ## 9. Jobs and progress
 
@@ -132,11 +132,11 @@ Audio is encoded with ffmpeg. Default quality: mono, 64 kbps AAC for M4B and 64 
 - Several books can be queued for conversion at once. Each queued book is split into chapter tasks, and all chapter tasks go into one global pool.
 - N workers take tasks from the pool, from any book. Each worker runs its own TTS engine process. N defaults to half the CPU cores and can be changed in settings.
 - Tasks are taken **FIFO by book**: chapters of the earliest queued book go first, in chapter order. When that book has no unstarted chapters left, free workers move on to the next book, so no worker sits idle.
-- When all chapters of a book are done, its M4B and MP3 ZIP are built.
+- When all chapters of a book are done, its M4B and WebM ZIP are built.
 - A book can be paused and resumed. Pausing lets running chapters finish and stops new ones from starting. Reordering the queue is not supported in v1.
 - Progress is saved per chunk. If the app or container restarts, the job **resumes** from the last finished chunk instead of starting over.
 - A failed chunk is retried up to 3 times. If it still fails, that chapter is marked **failed** with the error message. Other chapters of the book, and other books, keep going.
-- When the remaining chapters finish, the book's status is **done with errors**. The M4B and MP3 ZIP are not built until every chapter is done. Failed chapters are fixed with **regenerate** on the book page (section 3).
+- When the remaining chapters finish, the book's status is **done with errors**. The M4B and WebM ZIP are not built until every chapter is done. Failed chapters are fixed with **regenerate** on the book page (section 3).
 - If 3 chapters fail in a row (for example, the TTS engine is missing or broken), the whole pool pauses and the UI shows a banner with the error, so the queue does not fail book after book.
 - There is no separate cancel. To stop for now, pause the book; to get rid of it, delete it. Deleting a book (from its page or the library) stops its running chapters and removes all its files.
 - The UI gets progress updates through server-sent events (or polling as a fallback).
@@ -145,7 +145,7 @@ Audio is encoded with ffmpeg. Default quality: mono, 64 kbps AAC for M4B and 64 
 
 - Uploaded books, intermediate audio chunks and finished outputs are stored in a Docker volume.
 - Job and book metadata are stored in SQLite in the same volume.
-- Intermediate chunks are deleted once a chapter finishes successfully. Finished audio is kept per chapter for as long as the book is in the library, so single chapters can be regenerated and the final files rebuilt (about 30 MB per hour of audio at 64 kbps).
+- Intermediate chunks are deleted once a chapter finishes successfully. Finished audio is kept per chapter as WebM for as long as the book is in the library, so single chapters can be regenerated and the final files rebuilt (about 15 MB per hour of audio at 32 kbps Opus).
 - Deleting a book from the library deletes all its files.
 
 ## 11. Non-functional requirements
@@ -206,7 +206,7 @@ Once this spec is agreed, create implementation issues in the Book to audio Line
 3. TTS engine interface and Piper engine.
 4. Global chapter task pool with N workers: progress, pause, resume, delete; per-chapter regeneration.
 5. Speed benchmark and time estimates.
-6. Audio output: M4B and MP3 ZIP.
+6. Audio output: M4B and WebM ZIP.
 7. Web UI: upload with language, preview, book page with per-chapter status, player and regenerate, library.
 8. Language settings, including hidden Russian.
 
