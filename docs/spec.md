@@ -159,10 +159,9 @@ Audio is encoded with ffmpeg. Default quality: mono, 32 kbps Opus for chapter We
 
 TypeScript end to end.
 
-- **Frontend:** React + Vite.
-- **Backend:** Node.js (TypeScript) HTTP API serving the frontend, uploads, jobs and downloads.
+- **App:** one Node.js process. Fastify serves the HTTP API under `/api` (uploads, jobs, downloads) and hands every other request to Next.js (App Router, React), hosted inside Fastify as a custom server.
+- **Database:** SQLite through `better-sqlite3`, with numbered migrations applied at startup.
 - **Workers:** a scheduler in the backend process takes chapter tasks from the global pool and runs N TTS engine processes (section 9).
-- **Database:** SQLite.
 - **Parsing:** an EPUB library or an in-house parser (decided in the M1 parsing ticket), and `pdfjs-dist` for PDF text and outline.
 - **TTS:** Piper binary and voice models in the Docker image, called as a child process.
 - **Audio:** ffmpeg for encoding, joining chunks and writing chapters and tags.

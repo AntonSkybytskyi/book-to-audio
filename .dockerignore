@@ -1,0 +1,14 @@
+.git
+.github
+.next
+.omc
+.claude
+node_modules
+dist
+data
+coverage
+*.log
+.env
+.env.*
+next-env.d.ts
+*.tsbuildinfo
