@@ -127,7 +127,7 @@ export function registerBookRoutes(api: FastifyInstance, deps: BookRouteDeps) {
     return sendFile(req, reply, storage.resolve(book.coverPath), book.coverMime);
   });
 
-  api.get<{ Params: { id: string; position: string } }>(
+  api.get<{ Params: { id: string; position: string }; Querystring: { v?: string } }>(
     "/books/:id/chapters/:position/audio",
     async (req, reply) => {
       const book = withBook(req.params.id, reply);
@@ -137,8 +137,25 @@ export function registerBookRoutes(api: FastifyInstance, deps: BookRouteDeps) {
       }
       const chapter = repo.chapter(book.id, Number(req.params.position));
       if (!chapter) return sendError(reply, 404, "not_found", "There is no such chapter.");
-      if (chapter.status !== "done" || !chapter.audioPath) {
+      // A chapter that is being regenerated keeps its old audio until the new file replaces it.
+      if (!chapter.audioPath) {
         return sendError(reply, 404, "not_ready", "This chapter has no audio yet.");
+      }
+      // The player asks for the version it started with. After the file was replaced, a later
+      // Range request for the old one would return different bytes and break decoding.
+      const { v } = req.query;
+      if (v !== undefined) {
+        if (typeof v !== "string" || !/^\d{1,9}$/.test(v)) {
+          return sendError(reply, 400, "invalid_version", "The audio version is not valid.");
+        }
+        if (Number(v) !== chapter.audioVersion) {
+          return sendError(
+            reply,
+            410,
+            "version_changed",
+            "A new version of this chapter is ready.",
+          );
+        }
       }
       return sendFile(req, reply, storage.resolve(chapter.audioPath), "audio/webm");
     },

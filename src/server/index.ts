@@ -54,7 +54,7 @@ async function main() {
   };
   const queue = new ChapterQueue(db);
   // Workers never create a book's audio folder (so a deleted book stays deleted); queued books get it here.
-  for (const id of queue.convertingBookIds()) storage.ensureAudioDir(id);
+  for (const id of queue.activeBookIds()) storage.ensureAudioDir(id);
   const encoder = { ffmpegBin: config.ffmpegBin, bitrate: config.opusBitrate };
   const pool = new WorkerPool({
     queue,

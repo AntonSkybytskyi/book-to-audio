@@ -162,6 +162,8 @@ describe("live updates and pool routes", () => {
         durationSeconds: null,
         chunkCount: 8,
         chunksDone: 4,
+        audioVersion: null,
+        regenError: null,
       });
       await stream.until(/event: chapter/);
 
@@ -293,6 +295,8 @@ describe("live updates and pool routes", () => {
             durationSeconds: null,
             chunkCount: 0,
             chunksDone: 0,
+            audioVersion: null,
+            regenError: null,
           });
         }
       };

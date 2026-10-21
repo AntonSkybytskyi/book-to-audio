@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import { ApiError, getConfig, uploadBook } from "../_lib/api";
 import { cx } from "../_lib/cx";
+import { UPLOAD_BUTTON_ID } from "../_lib/focus";
 import { ProgressBar } from "./ProgressBar";
 import styles from "./UploadZone.module.css";
 
@@ -97,7 +98,12 @@ export function UploadZone() {
       ) : (
         <>
           <p className={styles.hint}>Drop an EPUB here, or choose one from your computer.</p>
-          <button type="button" className={styles.choose} onClick={() => input.current?.click()}>
+          <button
+            id={UPLOAD_BUTTON_ID}
+            type="button"
+            className={styles.choose}
+            onClick={() => input.current?.click()}
+          >
             Choose an EPUB
           </button>
         </>

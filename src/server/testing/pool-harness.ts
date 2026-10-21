@@ -9,8 +9,11 @@ import type { AppEvent } from "../events/bus.js";
 import { TtsError } from "../tts/engine.js";
 import { createTestContext, type TestContext } from "./context.js";
 
+/** How long `until` waits by default. Tests that do real file or process work pass their own. */
+export const UNTIL_DEFAULT_MS = 5000;
+
 /** Waits until `condition` holds, yielding to the event loop (not to timers) in between. */
-export const until = async (condition: () => boolean, timeoutMs = 2000) => {
+export const until = async (condition: () => boolean, timeoutMs = UNTIL_DEFAULT_MS) => {
   const start = Date.now();
   while (!condition()) {
     if (Date.now() - start > timeoutMs) throw new Error("timed out waiting for condition");

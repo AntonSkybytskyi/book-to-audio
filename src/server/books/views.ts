@@ -16,6 +16,12 @@ export interface ChapterView {
   /** Chunks the chapter is split into (0 until it starts) and how many are finished. */
   chunkCount: number;
   chunksDone: number;
+  /** There is audio to play: also true while the chapter is regenerated, or after a failed retry. */
+  hasAudio: boolean;
+  /** Changes when the audio is replaced; the player puts it in the audio URL. */
+  audioVersion: number;
+  /** Why the last regeneration failed. The chapter is `done` and kept its previous audio. */
+  regenError: string | null;
 }
 
 export interface BookSummaryView {
@@ -68,6 +74,9 @@ export const toChapterView = (chapter: Chapter): ChapterView => ({
   durationSeconds: chapter.durationSeconds,
   chunkCount: chapter.chunkCount,
   chunksDone: chapter.chunksDone,
+  hasAudio: chapter.audioPath !== null,
+  audioVersion: chapter.audioVersion,
+  regenError: chapter.regenError,
 });
 
 /** A book with its chapters, or null when it does not exist. */

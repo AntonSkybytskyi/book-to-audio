@@ -29,7 +29,10 @@ export async function sendFile(
 
   if (req.headers["if-none-match"] === etag) return reply.code(304).send();
 
-  const range = parseRange(req.headers.range, stat.size);
+  // A client resuming a download of an older version of the file gets the whole new one.
+  const ifRange = req.headers["if-range"];
+  const range =
+    ifRange !== undefined && ifRange !== etag ? null : parseRange(req.headers.range, stat.size);
   if (range === "unsatisfiable") {
     return reply.code(416).header("Content-Range", `bytes */${stat.size}`).send();
   }

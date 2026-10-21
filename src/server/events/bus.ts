@@ -12,6 +12,10 @@ export interface ChapterEvent {
   /** Chunks the chapter is split into and how many are finished; equal while it is being joined. */
   chunkCount: number;
   chunksDone: number;
+  /** Set when the chapter's audio was written; null in every other event. */
+  audioVersion: number | null;
+  /** Set when a regeneration failed and the chapter went back to `done` with its old audio. */
+  regenError: string | null;
 }
 
 export interface BookEvent {
@@ -38,7 +42,13 @@ export interface BookAddedEvent {
   bookId: string;
 }
 
-export type AppEvent = ChapterEvent | BookEvent | PoolEvent | BookAddedEvent;
+/** Sent after the book and all its files are gone; no event about this book follows. */
+export interface BookDeletedEvent {
+  type: "book-deleted";
+  bookId: string;
+}
+
+export type AppEvent = ChapterEvent | BookEvent | PoolEvent | BookAddedEvent | BookDeletedEvent;
 /** `seq` grows with every event, so a client can tell which of two states is newer. */
 export type Listener = (event: AppEvent, seq: number) => void;
 

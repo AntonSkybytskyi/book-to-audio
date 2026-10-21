@@ -23,7 +23,9 @@ describe("WorkerPool: events", () => {
         position: 1,
         progress: 1,
         durationSeconds: 3,
+        audioVersion: 1,
       });
+      expect(chapter[0]).toMatchObject({ audioVersion: null });
       expect(h.events).toContainEqual({
         type: "book",
         bookId: id,

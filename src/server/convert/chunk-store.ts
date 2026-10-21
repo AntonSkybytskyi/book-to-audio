@@ -134,7 +134,7 @@ export class ChunkStore {
   }
 
   remove(bookId: string, position: number): void {
-    fs.rmSync(this.storage.partsDir(bookId, position), { recursive: true, force: true });
+    this.storage.removeParts(bookId, position);
   }
 }
 

@@ -114,26 +114,60 @@ export class ChapterQueue {
     );
   }
 
+  /** Also bumps the chapter's audio version and the book's audio generation. */
   markDone(task: ClaimedChapter, audioPath: string, durationSeconds: number): boolean {
-    return (
-      this.db
-        .prepare(
-          `UPDATE chapters SET status = 'done', progress = 1, chunks_done = chunk_count,
-             error = NULL, audio_path = @audioPath, duration_seconds = @durationSeconds,
-             updated_at = ${NOW} WHERE ${OWN}`,
-        )
-        .run({ id: task.id, claim: task.claim, audioPath, durationSeconds }).changes > 0
-    );
+    return this.db
+      .transaction(() => {
+        const changed =
+          this.db
+            .prepare(
+              `UPDATE chapters SET status = 'done', progress = 1, chunks_done = chunk_count,
+                 error = NULL, regen_error = NULL, audio_path = @audioPath,
+                 duration_seconds = @durationSeconds, audio_version = audio_version + 1, updated_at = ${NOW} WHERE ${OWN}`,
+            )
+            .run({ id: task.id, claim: task.claim, audioPath, durationSeconds }).changes > 0;
+        if (changed) {
+          this.db
+            .prepare(
+              `UPDATE books SET audio_generation = audio_generation + 1, updated_at = ${NOW} WHERE id = ?`,
+            )
+            .run(task.bookId);
+        }
+        return changed;
+      })
+      .immediate();
   }
 
-  /** The finished chunks stay, so running the chapter again can continue from them. */
+  /**
+   * The attempt failed. A chapter with no audio becomes `failed` and keeps its finished chunks,
+   * so running it again continues from them. A chapter that already has audio (it was being
+   * regenerated) goes back to `done` with that audio, and the message is kept as `regen_error`:
+   * the book stays as finished as it was. Use `hasAudio` afterwards to tell which happened.
+   */
   markFailed(task: ClaimedChapter, error: string): boolean {
     return (
       this.db
         .prepare(
-          `UPDATE chapters SET status = 'failed', error = @error, updated_at = ${NOW} WHERE ${OWN}`,
+          `UPDATE chapters SET
+             status = CASE WHEN audio_path IS NULL THEN 'failed' ELSE 'done' END,
+             error = CASE WHEN audio_path IS NULL THEN @error ELSE NULL END,
+             regen_error = CASE WHEN audio_path IS NULL THEN NULL ELSE @error END,
+             progress = CASE WHEN audio_path IS NULL THEN progress ELSE 1 END,
+             chunk_count = CASE WHEN audio_path IS NULL THEN chunk_count ELSE 0 END,
+             chunks_done = CASE WHEN audio_path IS NULL THEN chunks_done ELSE 0 END,
+             updated_at = ${NOW} WHERE ${OWN}`,
         )
         .run({ id: task.id, claim: task.claim, error }).changes > 0
+    );
+  }
+
+  /** Whether the chapter has an audio file. */
+  hasAudio(id: number): boolean {
+    return (
+      this.db
+        .prepare("SELECT audio_path IS NOT NULL FROM chapters WHERE id = ?")
+        .pluck()
+        .get(id) === 1
     );
   }
 
@@ -151,6 +185,12 @@ export class ChapterQueue {
     return (
       this.db.prepare("SELECT 1 FROM chapters WHERE audio_path = ?").pluck().get(audioPath) === 1
     );
+  }
+
+  /** How often the chapter's audio has been written. */
+  audioVersion(id: number): number {
+    return (this.db.prepare("SELECT audio_version FROM chapters WHERE id = ?").pluck().get(id) ??
+      0) as number;
   }
 
   bookCounts(bookId: string): BookCounts | null {
@@ -174,8 +214,10 @@ export class ChapterQueue {
   }
 
   /**
-   * Marks a converting book `done` or `done_with_errors` once none of its
-   * chapters is waiting or running. Returns the status the book ends up with.
+   * Marks a converting or paused book `done` or `done_with_errors` once none of its
+   * chapters is waiting or running. A paused book with chapters still waiting stays
+   * paused; one whose last running chapter just finished has nothing left to pause.
+   * Returns the status the book ends up with.
    */
   refreshBookStatus(bookId: string): BookStatus | null {
     return this.db
@@ -184,7 +226,7 @@ export class ChapterQueue {
           | { status: BookStatus }
           | undefined;
         if (!book) return null;
-        if (book.status !== "converting") return book.status;
+        if (book.status !== "converting" && book.status !== "paused") return book.status;
 
         const open = this.db
           .prepare(
@@ -192,7 +234,7 @@ export class ChapterQueue {
           )
           .pluck()
           .get(bookId) as number;
-        if (open > 0) return "converting";
+        if (open > 0) return book.status;
 
         const failed = this.db
           .prepare(`SELECT count(*) FROM chapters WHERE book_id = ? AND status = 'failed'`)
@@ -207,17 +249,16 @@ export class ChapterQueue {
       .immediate();
   }
 
-  /** Ids of the books that are being converted. */
-  convertingBookIds(): string[] {
+  /** Ids of the books that are being converted or are paused part way. */
+  activeBookIds(): string[] {
     return this.db
-      .prepare("SELECT id FROM books WHERE status = 'converting'")
+      .prepare("SELECT id FROM books WHERE status IN ('converting', 'paused')")
       .pluck()
       .all() as string[];
   }
 
   /** Settles books whose last chapter finished just before a restart. */
-  refreshAllConverting(): void {
-    const ids = this.db.prepare("SELECT id FROM books WHERE status = 'converting'").pluck().all();
-    for (const id of ids as string[]) this.refreshBookStatus(id);
+  refreshAllActive(): void {
+    for (const id of this.activeBookIds()) this.refreshBookStatus(id);
   }
 }

@@ -17,6 +17,12 @@ export interface Chapter {
   /** Chunks the chapter is split into (0 until it starts) and how many are finished. */
   chunkCount: number;
   chunksDone: number;
+  /** There is audio to play, also while the chapter is being regenerated. */
+  hasAudio: boolean;
+  /** Changes when the audio is replaced; part of the audio URL so an old copy is never reused. */
+  audioVersion: number;
+  /** Why the last regeneration failed. The chapter is done and kept its previous audio. */
+  regenError: string | null;
 }
 
 export interface BookSummary {
@@ -100,8 +106,8 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export const coverUrl = (id: string) => `/api/books/${id}/cover`;
-export const audioUrl = (id: string, position: number) =>
-  `/api/books/${id}/chapters/${position}/audio`;
+export const audioUrl = (id: string, position: number, version: number) =>
+  `/api/books/${id}/chapters/${position}/audio?v=${version}`;
 
 export const getConfig = () => request<{ maxUploadMb: number }>("/api/config");
 export const getPool = () => requestSnapshot<PoolStatus>("/api/pool");
@@ -126,6 +132,24 @@ export const setLanguage = (id: string, language: Language) =>
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ language }),
   });
+
+const post = (url: string) => request<Book>(url, { method: "POST" });
+export const pauseBook = (id: string) => post(`/api/books/${id}/pause`);
+export const resumeBook = (id: string) => post(`/api/books/${id}/resume`);
+export const regenerateBook = (id: string) => post(`/api/books/${id}/regenerate`);
+export const regenerateChapter = (id: string, position: number) =>
+  post(`/api/books/${id}/chapters/${position}/regenerate`);
+
+/** A book that is already gone counts as deleted. */
+export async function deleteBook(id: string): Promise<void> {
+  let res: Response;
+  try {
+    res = await fetch(`/api/books/${id}`, { method: "DELETE" });
+  } catch {
+    throw new ApiError(0, "network", NETWORK_MESSAGE);
+  }
+  if (!res.ok && res.status !== 404) throw await toApiError(res);
+}
 
 /** Uploads with XMLHttpRequest, because `fetch` cannot report upload progress. */
 export function uploadBook(file: File, onProgress: (fraction: number) => void): Promise<Book> {

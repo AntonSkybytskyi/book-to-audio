@@ -203,7 +203,7 @@ describe("BookRepository and ChapterQueue", () => {
       addBook("B"); // ready, not queued
       repo.queue(converting);
 
-      expect(queue.convertingBookIds()).toEqual([converting]);
+      expect(queue.activeBookIds()).toEqual([converting]);
     });
 
     it("does not take chapters of a paused book", () => {
@@ -366,7 +366,7 @@ describe("BookRepository and ChapterQueue", () => {
       const id = addBook("A", 1);
       finishChapters(repo, queue, id, ["done"]);
 
-      queue.refreshAllConverting();
+      queue.refreshAllActive();
 
       expect(repo.get(id)?.status).toBe("done");
     });

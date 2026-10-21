@@ -52,6 +52,7 @@
 
 .meta,
 .status {
+  overflow-wrap: anywhere;
   font-size: 0.9rem;
   color: var(--ink-muted);
 }
@@ -63,4 +64,9 @@
 .quiet {
   margin-top: 3rem;
   color: var(--ink-muted);
+}
+
+.actions {
+  display: flex;
+  margin-top: 0.4rem;
 }

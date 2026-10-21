@@ -6,6 +6,7 @@ import { ApiError, convertBook, setLanguage, type Language } from "../_lib/api";
 import { formatMinutes, formatWords, languageName, pluralize } from "../_lib/format";
 import { useBook } from "../_lib/use-book";
 import { BookHeader } from "./BookHeader";
+import { BookDeleted } from "./BookDeleted";
 import { LoadState } from "./LoadState";
 import styles from "./PreviewView.module.css";
 import shared from "./shared.module.css";
@@ -14,7 +15,7 @@ const LANGUAGES: Language[] = ["en", "uk", "ru"];
 
 export function PreviewView({ id }: { id: string }) {
   const router = useRouter();
-  const { data: book, error, setData: setBook } = useBook(id);
+  const { data: book, error, deleted, setData: setBook } = useBook(id);
   const [language, setLanguageChoice] = useState<Language | null>(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -25,6 +26,7 @@ export function PreviewView({ id }: { id: string }) {
     if (book && book.status !== "ready" && !busy) router.replace(`/books/${id}`);
   }, [book, busy, id, router]);
 
+  if (deleted) return <BookDeleted />;
   if (!book || book.status !== "ready") return <LoadState error={error} />;
 
   const chosen = language ?? (book.language as Language);

@@ -226,6 +226,8 @@ export async function concatWebm(
       });
     }
     await syncFile(tempPath);
+    // The chapter file is replaced here, before the caller can record it. A caller whose claim
+    // went stale meanwhile has still replaced the file, and nothing bumps its audio version.
     await fs.rename(tempPath, outputPath);
     return { durationSeconds: seconds };
   } finally {

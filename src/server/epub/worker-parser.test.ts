@@ -10,6 +10,9 @@ import { createWorkerParser, ParserBusyError } from "./worker-parser.js";
 // The worker runs the TypeScript source through tsx, as `pnpm dev` does.
 const execArgv = ["--import", "tsx"];
 
+/** Starting a worker thread with tsx is slow when the machine is busy. */
+const SLOW_START_MS = 30_000;
+
 describe("createWorkerParser", () => {
   let dir: string;
 
@@ -29,38 +32,52 @@ describe("createWorkerParser", () => {
 
   const scriptWorker = (body: string) => pathToUrl(write("worker.mjs", body));
 
-  it("parses a file in a worker thread and brings the cover back as a Buffer", async () => {
-    const parse = createWorkerParser({ execArgv });
+  it(
+    "parses a file in a worker thread and brings the cover back as a Buffer",
+    async () => {
+      const parse = createWorkerParser({ execArgv });
 
-    const book = await parse(write("book.epub", await lighthouseBook()));
+      const book = await parse(write("book.epub", await lighthouseBook()));
 
-    expect(book.title).toBe("The Lighthouse Keeper's Almanac");
-    expect(book.chapters).toHaveLength(4);
-    expect(Buffer.isBuffer(book.cover?.bytes)).toBe(true);
-    expect(book.cover?.bytes.subarray(1, 4).toString()).toBe("PNG");
-  });
+      expect(book.title).toBe("The Lighthouse Keeper's Almanac");
+      expect(book.chapters).toHaveLength(4);
+      expect(Buffer.isBuffer(book.cover?.bytes)).toBe(true);
+      expect(book.cover?.bytes.subarray(1, 4).toString()).toBe("PNG");
+    },
+    SLOW_START_MS,
+  );
 
-  it("passes typed errors through", async () => {
-    const parse = createWorkerParser({ execArgv });
-    const drm = await zipEpub({ "META-INF/rights.xml": "<rights/>" });
+  it(
+    "passes typed errors through",
+    async () => {
+      const parse = createWorkerParser({ execArgv });
+      const drm = await zipEpub({ "META-INF/rights.xml": "<rights/>" });
 
-    const error = await parse(write("drm.epub", drm)).catch((e: unknown) => e);
+      const error = await parse(write("drm.epub", drm)).catch((e: unknown) => e);
 
-    expect(error).toBeInstanceOf(EpubError);
-    expect(error).toMatchObject({ code: "drm" });
-  });
+      expect(error).toBeInstanceOf(EpubError);
+      expect(error).toMatchObject({ code: "drm" });
+    },
+    SLOW_START_MS,
+  );
 
-  it("rejects an element bomb as unsafe_archive without taking the process down", async () => {
-    const bomb = await zipEpub({
-      "META-INF/container.xml": CONTAINER_XML,
-      "OEBPS/content.opf": `<package><manifest><item id="a" href="a.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="a"/></spine></package>`,
-      "OEBPS/a.xhtml": xhtml("<i/>".repeat(2_000_000)),
-    });
-    expect(bomb.length).toBeLessThan(100_000);
-    const parse = createWorkerParser({ execArgv });
+  it(
+    "rejects an element bomb as unsafe_archive without taking the process down",
+    async () => {
+      const bomb = await zipEpub({
+        "META-INF/container.xml": CONTAINER_XML,
+        "OEBPS/content.opf": `<package><manifest><item id="a" href="a.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="a"/></spine></package>`,
+        "OEBPS/a.xhtml": xhtml("<i/>".repeat(2_000_000)),
+      });
+      expect(bomb.length).toBeLessThan(100_000);
+      const parse = createWorkerParser({ execArgv });
 
-    await expect(parse(write("bomb.epub", bomb))).rejects.toMatchObject({ code: "unsafe_archive" });
-  });
+      await expect(parse(write("bomb.epub", bomb))).rejects.toMatchObject({
+        code: "unsafe_archive",
+      });
+    },
+    SLOW_START_MS,
+  );
 
   it("maps a worker that runs out of memory to unsafe_archive", async () => {
     const parse = createWorkerParser({

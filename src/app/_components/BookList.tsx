@@ -1,10 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { getBooks, type BookSummary } from "../_lib/api";
-import { formatClock, formatMinutes, languageName, pluralize } from "../_lib/format";
+import { libraryIsBusy, libraryStatus } from "../_lib/book-status";
+import { cx } from "../_lib/cx";
+import { UPLOAD_BUTTON_ID } from "../_lib/focus";
+import { languageName } from "../_lib/format";
 import { BookCover } from "./BookCover";
+import { DeleteBookDialog } from "./DeleteBookDialog";
 import { useLiveEvents, useLiveStatus } from "../_lib/events";
 import { patchLibrary } from "../_lib/live-patch";
 import { usePoll } from "../_lib/use-poll";
@@ -13,23 +17,6 @@ import styles from "./BookList.module.css";
 import shared from "./shared.module.css";
 
 const POLL_MS = 3000;
-
-const anyConverting = (books: BookSummary[]) => books.some((b) => b.status === "converting");
-
-function statusText(book: BookSummary): string {
-  switch (book.status) {
-    case "ready":
-      return `Ready to convert · about ${formatMinutes(book.estimatedMinutes)}`;
-    case "converting":
-      return `Converting · ${book.doneCount} of ${pluralize(book.chapterCount, "chapter")} ready`;
-    case "paused":
-      return `Paused · ${book.doneCount} of ${pluralize(book.chapterCount, "chapter")} ready`;
-    case "done":
-      return `Ready to listen · ${formatClock(book.durationSeconds)}`;
-    case "done_with_errors":
-      return `${pluralize(book.failedCount, "chapter")} failed · ${book.doneCount} ready`;
-  }
-}
 
 /** Remounts the shelf on "Try again", which loads the books from scratch. */
 export function BookList() {
@@ -44,15 +31,18 @@ function Shelf({ onRetry }: { onRetry: () => void }) {
     error,
     stale,
     patch,
+    update,
   } = usePoll({
     load: getBooks,
-    keepPolling: anyConverting,
+    keepPolling: libraryIsBusy,
     intervalMs: POLL_MS,
     live,
   });
   useLiveEvents(
     useCallback((event, seq) => patch((current) => patchLibrary(current, event), seq), [patch]),
   );
+  const [deleting, setDeleting] = useState<BookSummary | null>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
 
   if (books === null && error === null) {
     return (
@@ -89,7 +79,7 @@ function Shelf({ onRetry }: { onRetry: () => void }) {
 
   return (
     <section aria-labelledby="library-title" className={styles.library}>
-      <h2 id="library-title" className={styles.heading}>
+      <h2 id="library-title" className={styles.heading} ref={heading} tabIndex={-1}>
         Library
       </h2>
       {stale && <p className={styles.quiet}>Lost contact with the server. Trying again…</p>}
@@ -107,18 +97,46 @@ function Shelf({ onRetry }: { onRetry: () => void }) {
               <p className={styles.meta}>
                 {[book.author, languageName(book.language)].filter(Boolean).join(" · ")}
               </p>
-              <p className={styles.status}>{statusText(book)}</p>
-              {book.status === "converting" && (
+              <p className={styles.status}>{libraryStatus(book)}</p>
+              {(book.status === "converting" || book.status === "paused") && (
                 <ProgressBar
                   thin
                   value={book.chapterCount === 0 ? 0 : book.doneCount / book.chapterCount}
                   label={`Progress of ${book.title}`}
                 />
               )}
+              <div className={styles.actions}>
+                <button
+                  type="button"
+                  className={cx(shared.button, shared.small, shared.outlineDanger)}
+                  aria-label={`Delete ${book.title}`}
+                  onClick={() => setDeleting(book)}
+                >
+                  Delete
+                </button>
+              </div>
             </div>
           </li>
         ))}
       </ul>
+      <DeleteBookDialog
+        book={deleting}
+        onClose={() => setDeleting(null)}
+        onDeleted={(id) => {
+          setDeleting(null);
+          let remaining = 0;
+          update((current) => {
+            const next = current.filter((book) => book.id !== id);
+            remaining = next.length;
+            return next;
+          });
+          // After the dialog has closed: the button that opened it is gone, so focus would be lost.
+          // With no books left the heading goes too, and the way to add one is the next best place.
+          requestAnimationFrame(() =>
+            (remaining > 0 ? heading.current : document.getElementById(UPLOAD_BUTTON_ID))?.focus(),
+          );
+        }}
+      />
     </section>
   );
 }

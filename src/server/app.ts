@@ -9,11 +9,15 @@ import Fastify, {
 } from "fastify";
 import type { PoolControl } from "./convert/pool.js";
 import type { EventBus } from "./events/bus.js";
+import { BookControls } from "./books/controls.js";
+import { ChapterQueue } from "./books/queue.js";
 import { BookRepository } from "./books/repository.js";
+import { BookTransitions } from "./books/transitions.js";
 import type { Storage } from "./books/storage.js";
 import type { ParsedEpub } from "./epub/types.js";
 import { createWorkerParser } from "./epub/worker-parser.js";
 import { QuietLogController } from "./logging.js";
+import { registerBookControlRoutes } from "./routes/book-controls.js";
 import { registerBookRoutes } from "./routes/books.js";
 import { registerConfigRoute } from "./routes/config.js";
 import { registerErrorHandler } from "./routes/errors.js";
@@ -84,6 +88,16 @@ export function buildServer({
   });
   app.server.headersTimeout = HEADERS_TIMEOUT_MS;
   const repo = new BookRepository(db);
+  const queue = new ChapterQueue(db);
+  const controls = new BookControls({
+    repo,
+    queue,
+    transitions: new BookTransitions(db, queue),
+    storage,
+    bus,
+    pool,
+    logger: app.log,
+  });
 
   registerHostAndOriginGuard(app, allowedHosts);
 
@@ -105,6 +119,7 @@ export function buildServer({
       });
       registerUpload(api, { repo, storage, engine, bus, parseEpub });
       registerBookRoutes(api, { repo, storage, engine, bus, pool });
+      registerBookControlRoutes(api, { repo, engine, controls });
       registerPoolRoutes(api, pool);
       registerSettingsRoutes(api, { settings, pool });
       registerEventsRoute(api, { bus, pool, ...eventStream });

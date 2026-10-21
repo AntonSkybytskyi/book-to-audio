@@ -16,6 +16,9 @@ const chapter = (position: number, overrides: Partial<Chapter> = {}): Chapter =>
   durationSeconds: null,
   chunkCount: 0,
   chunksDone: 0,
+  hasAudio: false,
+  audioVersion: 0,
+  regenError: null,
   ...overrides,
 });
 
@@ -50,6 +53,8 @@ const chapterEvent = (
   durationSeconds: null,
   chunkCount: 0,
   chunksDone: 0,
+  audioVersion: null,
+  regenError: null,
   ...overrides,
 });
 
@@ -153,7 +158,76 @@ describe("patchBook", () => {
     expect(patchBook(book(), chapterEvent({ position: 9 }))).toBeNull();
   });
 
-  it("takes the counts of a book event, and asks for a reload when the status changed", () => {
+  it("keeps the old audio while a chapter is regenerated, and takes the new version when it lands", () => {
+    const before = book({
+      chapters: [
+        chapter(1, {
+          status: "done",
+          progress: 1,
+          durationSeconds: 12,
+          hasAudio: true,
+          audioVersion: 3,
+        }),
+        chapter(2),
+        chapter(3),
+      ],
+    });
+
+    const regenerating = patchBook(before, chapterEvent({ position: 1, status: "queued" }));
+    const landed = patchBook(
+      regenerating ?? before,
+      chapterEvent({
+        position: 1,
+        status: "done",
+        progress: 1,
+        durationSeconds: 14,
+        audioVersion: 4,
+      }),
+    );
+    const first = patchBook(book(), chapterEvent({ position: 2, status: "done", audioVersion: 1 }));
+
+    expect(regenerating?.chapters[0]).toMatchObject({
+      status: "queued",
+      hasAudio: true,
+      audioVersion: 3,
+    });
+    expect(landed?.chapters[0]).toMatchObject({
+      status: "done",
+      audioVersion: 4,
+      durationSeconds: 14,
+    });
+    expect(first?.chapters[1]).toMatchObject({ hasAudio: true, audioVersion: 1 });
+  });
+
+  it("shows a failed regeneration as a note on a chapter that is done again, and clears it", () => {
+    const before = book({
+      chapters: [
+        chapter(1, { status: "queued", hasAudio: true, audioVersion: 2, durationSeconds: 9 }),
+        chapter(2),
+        chapter(3),
+      ],
+    });
+
+    const failed = patchBook(
+      before,
+      chapterEvent({ position: 1, status: "done", progress: 1, regenError: "Engine down." }),
+    );
+    const again = patchBook(
+      failed ?? before,
+      chapterEvent({ position: 1, status: "queued", progress: 0 }),
+    );
+
+    expect(failed?.chapters[0]).toMatchObject({
+      status: "done",
+      regenError: "Engine down.",
+      audioVersion: 2,
+      durationSeconds: 9,
+    });
+    expect(failed).toMatchObject({ doneCount: 1, failedCount: 0 });
+    expect(again?.chapters[0]).toMatchObject({ status: "queued", regenError: null });
+  });
+
+  it("takes the counts of a book event, and asks for a reload only when Convert changed the chapters", () => {
     const same: AppEvent = {
       type: "book",
       bookId: "b1",
@@ -169,8 +243,16 @@ describe("patchBook", () => {
       failedCount: 1,
       durationSeconds: 75,
     });
-    expect(patchBook(book(), changed)).toBeNull();
+    expect(patchBook(book(), changed)).toMatchObject({ status: "done_with_errors", doneCount: 2 });
+    expect(patchBook(book(), { ...same, status: "paused" })?.status).toBe("paused");
+    expect(patchBook(book({ status: "paused" }), same)?.status).toBe("converting");
     expect(patchBook(book({ status: "ready" }), { ...same, status: "converting" })).toBeNull();
+  });
+
+  it("knows nothing more about a deleted book than the page does", () => {
+    const before = book();
+
+    expect(patchBook(before, { type: "book-deleted", bookId: "b1" })).toBe(before);
   });
 });
 
@@ -196,6 +278,13 @@ describe("patchLibrary", () => {
   it("asks for a reload for a book it does not know and for a new book", () => {
     expect(patchLibrary([summary("b1")], bookEvent)).toBeNull();
     expect(patchLibrary([summary("b1")], { type: "book-added", bookId: "b3" })).toBeNull();
+  });
+
+  it("takes a deleted book out of the list, and keeps the list when it was not in it", () => {
+    const books = [summary("b1"), summary("b2")];
+
+    expect(patchLibrary(books, { type: "book-deleted", bookId: "b1" })).toEqual([books[1]]);
+    expect(patchLibrary(books, { type: "book-deleted", bookId: "zzz" })).toBe(books);
   });
 
   it("leaves the list alone for chapter and pool events", () => {

@@ -14,6 +14,10 @@ export interface ChapterEvent {
   durationSeconds: number | null;
   chunkCount: number;
   chunksDone: number;
+  /** Set when the chapter's audio was written; null in every other event. */
+  audioVersion: number | null;
+  /** Set when a regeneration failed and the chapter went back to done with its old audio. */
+  regenError: string | null;
 }
 
 export interface BookEvent {
@@ -34,7 +38,12 @@ export interface BookAddedEvent {
   bookId: string;
 }
 
-export type AppEvent = ChapterEvent | BookEvent | PoolEvent | BookAddedEvent;
+export interface BookDeletedEvent {
+  type: "book-deleted";
+  bookId: string;
+}
+
+export type AppEvent = ChapterEvent | BookEvent | PoolEvent | BookAddedEvent | BookDeletedEvent;
 
 /** `live`: the stream is open and pages need not poll. `down`: poll until it comes back. */
 export type LiveStatus = "connecting" | "live" | "down";
@@ -42,7 +51,7 @@ export type LiveStatus = "connecting" | "live" | "down";
 /** Called with every event and its sequence number (higher means newer). */
 export type EventListener = (event: AppEvent, seq: number) => void;
 
-const EVENT_TYPES = ["chapter", "book", "pool", "book-added"] as const;
+const EVENT_TYPES = ["chapter", "book", "pool", "book-added", "book-deleted"] as const;
 const RECONNECT_MS = 3000;
 
 // One EventSource for the whole page, shared by everything that listens.

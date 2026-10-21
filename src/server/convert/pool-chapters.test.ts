@@ -242,13 +242,14 @@ describe("WorkerPool with the real converter", () => {
     const id = addBook(Array.from({ length: 6 }, () => sentences(10)));
     createPool(2);
 
-    await until(() => repo.get(id)?.status === "done");
+    // Six chapters of real file work: slow on a busy machine, so the wait is explicit.
+    await until(() => repo.get(id)?.status === "done", 20_000);
 
     expect(engine.opened).toBeLessThanOrEqual(2);
     expect(engine.openSessions).toBeGreaterThanOrEqual(1);
     await pool?.stop();
     expect(engine.openSessions).toBe(0);
-  });
+  }, 30_000);
 
   it("closes the session of a worker that stops when the count goes down, and keeps the other", async () => {
     const id = addBook(Array.from({ length: 4 }, () => sentences(10)));

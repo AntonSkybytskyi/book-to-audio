@@ -14,6 +14,8 @@ const chapter = (progress: number, position = 1): ChapterEvent => ({
   durationSeconds: null,
   chunkCount: 0,
   chunksDone: 0,
+  audioVersion: null,
+  regenError: null,
 });
 describe("EventBus", () => {
   it("delivers events to every subscriber until they unsubscribe", () => {

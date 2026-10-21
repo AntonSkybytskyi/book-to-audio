@@ -1,54 +1,46 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
-import { audioUrl, type Book } from "../_lib/api";
-import { formatClock, pluralize } from "../_lib/format";
-import { useBook } from "../_lib/use-book";
+import { useRouter } from "next/navigation";
+import { useCallback, useRef, useState } from "react";
+import { audioUrl, regenerateChapter } from "../_lib/api";
+import { bookSummary, overallProgress } from "../_lib/book-status";
 import { usePool } from "../_lib/pool-store";
+import { useBook } from "../_lib/use-book";
+import { BookControls } from "./BookControls";
+import { BookDeleted } from "./BookDeleted";
 import { BookHeader } from "./BookHeader";
 import { ChapterRow } from "./ChapterRow";
+import { DeleteBookDialog } from "./DeleteBookDialog";
 import { LoadState } from "./LoadState";
 import { ProgressBar } from "./ProgressBar";
+import { RegenerateChapterDialog } from "./RegenerateChapterDialog";
 import styles from "./BookView.module.css";
 import shared from "./shared.module.css";
 
-/** Overall progress: finished chapters count fully, running ones by their own progress. */
-function overallProgress(book: Book): number {
-  if (book.chapters.length === 0) return 0;
-  const sum = book.chapters.reduce(
-    (total, c) => total + (c.status === "done" ? 1 : c.status === "generating" ? c.progress : 0),
-    0,
-  );
-  return sum / book.chapters.length;
-}
-
-function summary(book: Book, poolPaused: boolean): string {
-  const total = pluralize(book.chapterCount, "chapter");
-  switch (book.status) {
-    case "ready":
-      return "Not converted yet.";
-    case "converting":
-      if (poolPaused)
-        return `Waiting for conversion to resume: ${book.doneCount} of ${total} ready.`;
-      return `Converting: ${book.doneCount} of ${total} ready.`;
-    case "paused":
-      return `Paused: ${book.doneCount} of ${total} ready.`;
-    case "done":
-      return `All ${total} are ready, ${formatClock(book.durationSeconds)} in total.`;
-    case "done_with_errors":
-      return `Finished with ${pluralize(book.failedCount, "failed chapter")}. ${book.doneCount} of ${total} are ready.`;
-  }
-}
-
 export function BookView({ id }: { id: string }) {
-  const { data: book, error, stale } = useBook(id);
+  const router = useRouter();
+  const { data: book, error, stale, deleted, refresh } = useBook(id);
   const pool = usePool();
   const audio = useRef<HTMLAudioElement>(null);
+  /** The chapter and audio version that the shared <audio> element has loaded. */
+  const loaded = useRef<{ position: number; version: number } | null>(null);
   const [current, setCurrent] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [asking, setAsking] = useState<number | null>(null);
 
+  const regenerate = useCallback(
+    async (position: number) => {
+      const result = await regenerateChapter(id, position);
+      refresh();
+      return result;
+    },
+    [id, refresh],
+  );
+
+  if (deleted) return <BookDeleted />;
   if (!book) return <LoadState error={error} />;
 
   const onPlayFailed = (reason: unknown) => {
@@ -56,20 +48,29 @@ export function BookView({ id }: { id: string }) {
     if (reason instanceof DOMException && reason.name === "AbortError") return;
     setPlaying(false);
     setCurrent(null); // So the next click loads the chapter again instead of resuming a dead one.
+    loaded.current = null;
     setPlaybackError("This chapter could not be played in your browser.");
   };
 
   // One shared <audio> element, so only one chapter can play at a time.
   const toggle = (position: number) => {
     const element = audio.current;
-    if (!element) return;
+    const chapter = book.chapters.find((c) => c.position === position);
+    if (!element || !chapter) return;
     setPlaybackError(null);
-    if (current === position) {
-      if (element.paused) void element.play().catch(onPlayFailed);
-      else element.pause();
+    if (!element.paused && current === position) {
+      element.pause();
       return;
     }
-    element.src = audioUrl(id, position);
+    const same = loaded.current?.position === position;
+    // The audio was replaced since it was loaded: start the new file, never the old one.
+    if (same && loaded.current?.version === chapter.audioVersion) {
+      setCurrent(position);
+      void element.play().catch(onPlayFailed);
+      return;
+    }
+    element.src = audioUrl(id, position, chapter.audioVersion);
+    loaded.current = { position, version: chapter.audioVersion };
     setCurrent(position);
     void element.play().catch(onPlayFailed);
   };
@@ -89,7 +90,7 @@ export function BookView({ id }: { id: string }) {
           <ProgressBar value={overallProgress(book)} label="Overall conversion progress" />
         )}
         <p className={styles.summary} role="status" aria-live="polite">
-          {summary(book, pool?.state === "paused")}
+          {bookSummary(book, pool?.state === "paused")}
         </p>
         {book.status === "ready" && (
           <Link href={`/books/${book.id}/preview`} className={`${shared.button} ${styles.cta}`}>
@@ -98,6 +99,8 @@ export function BookView({ id }: { id: string }) {
         )}
         {stale && <p className={styles.stale}>Lost contact with the server. Trying again…</p>}
       </section>
+
+      <BookControls book={book} onChanged={refresh} onDelete={() => setDeleting(true)} />
 
       <p className={shared.error} role="alert">
         {playbackError}
@@ -108,12 +111,26 @@ export function BookView({ id }: { id: string }) {
           <ChapterRow
             key={chapter.position}
             chapter={chapter}
+            bookPaused={book.status === "paused"}
             current={current === chapter.position}
             playing={current === chapter.position && playing}
             onToggle={toggle}
+            onRegenerate={regenerate}
+            onConfirmRegenerate={setAsking}
           />
         ))}
       </ol>
+
+      <RegenerateChapterDialog
+        chapter={book.chapters.find((c) => c.position === asking) ?? null}
+        onRegenerate={regenerate}
+        onClose={() => setAsking(null)}
+      />
+      <DeleteBookDialog
+        book={deleting ? { id: book.id, title: book.title } : null}
+        onClose={() => setDeleting(false)}
+        onDeleted={() => router.push("/")}
+      />
 
       {/* eslint-disable-next-line jsx-a11y/media-has-caption -- spoken audio, no captions exist */}
       <audio
@@ -126,10 +143,19 @@ export function BookView({ id }: { id: string }) {
           setCurrent(null);
         }}
         onError={() => {
-          if (audio.current?.getAttribute("src")) {
-            setPlaying(false);
-            setCurrent(null);
+          if (!audio.current?.getAttribute("src")) return;
+          // A later request for a replaced file is refused by the server (410), which the
+          // element reports as a plain error: tell that apart from a broken file.
+          const wanted = book.chapters.find((c) => c.position === loaded.current?.position);
+          const replaced = wanted !== undefined && wanted.audioVersion !== loaded.current?.version;
+          setPlaying(false);
+          setCurrent(null);
+          loaded.current = null; // The next play loads the current version from the start.
+          if (replaced) {
+            setPlaybackError("A new version of this chapter is ready. Press play to hear it.");
+          } else {
             setPlaybackError("This chapter could not be loaded. Click play to try again.");
+            refresh(); // It may have been replaced a moment ago, and the page does not know yet.
           }
         }}
       />

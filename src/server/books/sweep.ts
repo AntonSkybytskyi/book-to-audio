@@ -30,7 +30,7 @@ export function sweepStorage(db: Database.Database, storage: Storage): SweepResu
     )
     .pluck();
 
-  for (const area of ["books", "audio"] as const) {
+  for (const area of storage.bookAreas) {
     const root = path.join(storage.dataDir, area);
     for (const entry of safeReaddir(root)) {
       if (!entry.isDirectory() || !UUID.test(entry.name)) continue;

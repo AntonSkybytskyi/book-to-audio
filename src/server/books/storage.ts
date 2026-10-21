@@ -8,6 +8,8 @@ const COVER_EXTENSIONS: Record<string, string> = {
   "image/webp": "webp",
 };
 
+const RM_OPTIONS = { recursive: true, force: true, maxRetries: 3, retryDelay: 50 } as const;
+
 /**
  * Where book files live under the data directory. Every path is built from a
  * server generated book id and a chapter position, never from user input, and
@@ -42,6 +44,11 @@ export class Storage {
     return path.join(this.audioDir(bookId), `${String(position).padStart(2, "0")}.parts`);
   }
 
+  /** Removes the saved chunks of one chapter. */
+  removeParts(bookId: string, position: number): void {
+    fs.rmSync(this.partsDir(bookId, position), RM_OPTIONS);
+  }
+
   /** Absolute path for a relative path stored in the database. */
   resolve(relPath: string): string {
     const full = path.resolve(this.dataDir, relPath);
@@ -63,9 +70,35 @@ export class Storage {
     return dir;
   }
 
-  /** Removes everything stored for a book. Used when an upload fails half way. */
+  /**
+   * The folders under the data directory that hold one `<book id>` folder per book. Deleting
+   * a book and the startup sweep both go through this list: a new kind of per-book files
+   * (the M4B and ZIP outputs) is added here, and nowhere else.
+   */
+  get bookAreas(): readonly string[] {
+    return ["books", "audio"];
+  }
+
+  /** Where `area` keeps the files of one book. */
+  areaDir(area: string, bookId: string): string {
+    return path.join(this.dataDir, area, bookId);
+  }
+
+  /**
+   * Removes everything stored for a book: the upload, the cover, finished chapters, saved
+   * chunks and temporary files. Every folder is tried even if the first cannot be removed;
+   * the first error is thrown afterwards. Whatever stays behind belongs to no book, so the
+   * startup sweep removes it.
+   */
   removeBookFiles(bookId: string): void {
-    fs.rmSync(this.bookDir(bookId), { recursive: true, force: true });
-    fs.rmSync(this.audioDir(bookId), { recursive: true, force: true });
+    let failure: unknown = null;
+    for (const area of this.bookAreas) {
+      try {
+        fs.rmSync(this.areaDir(area, bookId), RM_OPTIONS);
+      } catch (error) {
+        failure ??= error;
+      }
+    }
+    if (failure) throw failure;
   }
 }

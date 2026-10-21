@@ -33,7 +33,9 @@ export function PoolBanner() {
       <div className={styles.inner}>
         <div className={styles.text}>
           <h2 id="pool-banner-title" className={styles.title}>
-            {disk ? "Conversion is paused: the disk is almost full" : "Conversion is paused"}
+            {disk
+              ? "All conversion is paused: the disk is almost full"
+              : "All conversion is paused"}
           </h2>
           {disk ? (
             <p>
@@ -42,8 +44,9 @@ export function PoolBanner() {
             </p>
           ) : (
             <p>
-              Three chapters in a row failed, so no new chapters will start. Resume tries the
-              waiting chapters again; chapters that already failed stay failed.
+              Three chapters in a row failed, so no book starts new chapters. Resume tries the
+              waiting chapters again; chapters that already failed stay failed. (Pausing a single
+              book is done on its page.)
             </p>
           )}
           {!disk && pool.error && (
@@ -54,7 +57,7 @@ export function PoolBanner() {
           {failure && <p className={shared.error}>{failure}</p>}
         </div>
         <button type="button" className={shared.button} onClick={resume} disabled={resuming}>
-          {resuming ? "Resuming…" : "Resume"}
+          {resuming ? "Resuming…" : "Resume all"}
         </button>
       </div>
     </section>

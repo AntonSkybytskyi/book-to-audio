@@ -97,4 +97,23 @@ export const migrations: Migration[] = [
       ALTER TABLE pool_state ADD COLUMN cause TEXT CHECK (cause IN ('failures', 'disk'));
     `,
   },
+  {
+    id: 5,
+    name: "book_controls",
+    sql: `
+      -- Bumped each time a chapter's audio file is written. The player puts it in the audio URL,
+      -- so a regenerated chapter is never played from a cached copy of the old file.
+      ALTER TABLE chapters ADD COLUMN audio_version INTEGER NOT NULL DEFAULT 0;
+      -- Why the last regeneration of a finished chapter failed. The chapter stays done with its
+      -- previous audio; cleared when it is regenerated again.
+      ALTER TABLE chapters ADD COLUMN regen_error TEXT;
+      -- Bumped whenever any chapter's audio of the book is written. Whoever builds the M4B and ZIP
+      -- reads it when a build starts and records the generation it built from; the outputs are
+      -- current while the two are equal. A write during a build leaves them different. It counts
+      -- the writes that were recorded: a worker whose claim went stale while joining can still
+      -- rename its file over a chapter's file (rare), and that is not counted, so a build must not
+      -- assume the generation covers every write to the files.
+      ALTER TABLE books ADD COLUMN audio_generation INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
 ];

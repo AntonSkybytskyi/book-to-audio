@@ -37,6 +37,10 @@ export interface Chapter {
   durationSeconds: number | null;
   chunkCount: number;
   chunksDone: number;
+  /** Changes whenever the audio file is written again. */
+  audioVersion: number;
+  /** Why the last regeneration failed; the chapter kept its previous audio. */
+  regenError: string | null;
 }
 
 export interface NewBook {
@@ -87,6 +91,8 @@ interface ChapterRow {
   duration_seconds: number | null;
   chunk_count: number;
   chunks_done: number;
+  audio_version: number;
+  regen_error: string | null;
 }
 
 const toBook = (row: BookRow): Book => ({
@@ -113,6 +119,8 @@ const toChapter = (row: ChapterRow): Chapter => ({
   durationSeconds: row.duration_seconds,
   chunkCount: row.chunk_count,
   chunksDone: row.chunks_done,
+  audioVersion: row.audio_version,
+  regenError: row.regen_error,
 });
 
 const TOTALS_SQL = `
@@ -175,7 +183,7 @@ export class BookRepository {
     const rows = this.db
       .prepare(
         `SELECT position, title, char_count, word_count, status, progress, error, audio_path,
-                duration_seconds, chunk_count, chunks_done
+                duration_seconds, chunk_count, chunks_done, audio_version, regen_error
          FROM chapters WHERE book_id = ? ORDER BY position`,
       )
       .all(bookId) as ChapterRow[];
@@ -186,11 +194,17 @@ export class BookRepository {
     const row = this.db
       .prepare(
         `SELECT position, title, char_count, word_count, status, progress, error, audio_path,
-                duration_seconds, chunk_count, chunks_done
+                duration_seconds, chunk_count, chunks_done, audio_version, regen_error
          FROM chapters WHERE book_id = ? AND position = ?`,
       )
       .get(bookId, position) as ChapterRow | undefined;
     return row && toChapter(row);
+  }
+
+  /** Counts the chapter audio writes of the book (see migration 5). */
+  audioGeneration(id: string): number {
+    return (this.db.prepare("SELECT audio_generation FROM books WHERE id = ?").pluck().get(id) ??
+      0) as number;
   }
 
   /** Changes the language of a book that has not started converting. */

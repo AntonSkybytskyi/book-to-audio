@@ -28,7 +28,7 @@ describe("migrations 3 and 4 (chapter pool)", () => {
        VALUES ('b', 1, 'C', 'text', 4, 1, 'done', 1)`,
     ).run();
 
-    expect(runMigrations(db, migrations)).toEqual([3, 4]);
+    expect(runMigrations(db, migrations)).toEqual([3, 4, 5]);
 
     expect(
       db.prepare("SELECT status, progress, chunk_count, chunks_done, claim FROM chapters").get(),
@@ -63,5 +63,31 @@ describe("migrations 3 and 4 (chapter pool)", () => {
 
     expect(() => db.prepare("INSERT INTO pool_state (id) VALUES (2)").run()).toThrow(/CHECK/);
     expect(() => db.prepare("UPDATE pool_state SET state = 'stuck'").run()).toThrow(/CHECK/);
+  });
+});
+
+describe("migration 5 (book controls)", () => {
+  it("adds the audio version, the regeneration error and the audio generation, keeping existing rows", () => {
+    const db = new Database(":memory:");
+    db.pragma("foreign_keys = ON");
+    runMigrations(
+      db,
+      migrations.filter((m) => m.id <= 4),
+    );
+    db.prepare(
+      "INSERT INTO books (id, title, source_path, status) VALUES ('b', 'T', 's', 'done')",
+    ).run();
+    db.prepare(
+      `INSERT INTO chapters (book_id, position, title, text, char_count, word_count, status, audio_path)
+       VALUES ('b', 1, 'C', 'text', 4, 1, 'done', 'audio/b/01.webm')`,
+    ).run();
+
+    expect(runMigrations(db, migrations)).toEqual([5]);
+
+    expect(db.prepare("SELECT audio_version, regen_error, audio_path FROM chapters").get()).toEqual(
+      { audio_version: 0, regen_error: null, audio_path: "audio/b/01.webm" },
+    );
+    expect(db.prepare("SELECT audio_generation FROM books").pluck().get()).toBe(0);
+    db.close();
   });
 });

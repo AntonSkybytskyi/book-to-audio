@@ -21,11 +21,13 @@
 }
 
 .author {
+  overflow-wrap: anywhere;
   font-size: 1.05rem;
   color: var(--ink-muted);
 }
 
 .language {
+  overflow-wrap: anywhere;
   font-size: 0.85rem;
   color: var(--ink-muted);
 }

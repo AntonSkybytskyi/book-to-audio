@@ -11,8 +11,12 @@ export interface Poll<T> {
   error: ApiError | null;
   /** A refresh failed but older data is still shown. */
   stale: boolean;
+  /** Data was shown, and the server now says it does not exist (it was deleted). */
+  gone: boolean;
   /** Shows data that came from somewhere else, such as the answer to a request that changed it. */
   setData: (data: T) => void;
+  /** Changes the data shown, starting from the newest data (not from what a handler saw when it rendered). */
+  update: (change: (current: T) => T) => void;
   /**
    * Applies a live event, with its sequence number, to the data shown. `change` returns the
    * new data, the same object for no change, or null when it cannot tell and the data should
@@ -51,6 +55,7 @@ export function usePoll<T>({ load, keepPolling, intervalMs, live = false }: Opti
   const [data, setDataState] = useState<T | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [stale, setStale] = useState(false);
+  const [gone, setGone] = useState(false);
   const loaded = useRef(false);
   const latest = useRef<T | null>(null);
   const mounted = useRef(true);
@@ -75,10 +80,31 @@ export function usePoll<T>({ load, keepPolling, intervalMs, live = false }: Opti
     setStale(false);
   }, []);
 
+  const update = useCallback(
+    (change: (current: T) => T) => {
+      if (latest.current !== null) setData(change(latest.current));
+    },
+    [setData],
+  );
+
   /** Loads until the answer is current, and shows it. */
   const loadCurrent = useCallback(async () => {
     gate.current.sync(getEpoch(), getConnectSeq());
-    const snapshot = await loadUntilCurrent(load, gate.current);
+    let snapshot: Snapshot<T>;
+    try {
+      snapshot = await loadUntilCurrent(load, gate.current);
+    } catch (caught) {
+      // Not a hiccup: what was on screen no longer exists, and asking again will not bring it back.
+      if (
+        loaded.current &&
+        caught instanceof ApiError &&
+        caught.status === 404 &&
+        mounted.current
+      ) {
+        setGone(true);
+      }
+      throw caught;
+    }
     if (!mounted.current) return snapshot;
     setData(snapshot.data);
     // Events that came while nothing was shown yet could not be applied; ask again for them.
@@ -139,6 +165,7 @@ export function usePoll<T>({ load, keepPolling, intervalMs, live = false }: Opti
         }
       } catch (caught) {
         if (cancelled) return;
+        if (caught instanceof ApiError && caught.status === 404 && loaded.current) return;
         const apiError =
           caught instanceof ApiError ? caught : new ApiError(0, "network", "Failed to load.");
         if (loaded.current) {
@@ -174,5 +201,5 @@ export function usePoll<T>({ load, keepPolling, intervalMs, live = false }: Opti
     }
   }, [live, refresh]);
 
-  return { data, error, stale, setData, patch, refresh };
+  return { data, error, stale, gone, setData, update, patch, refresh };
 }

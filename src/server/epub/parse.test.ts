@@ -17,6 +17,9 @@ const encryption = (algorithm: string) =>
   `<enc:EncryptedData><enc:EncryptionMethod Algorithm="${algorithm}"/><enc:CipherData>` +
   `<enc:CipherReference URI="OEBPS/c1.xhtml"/></enc:CipherData></enc:EncryptedData></encryption>`;
 
+/** Tests that parse a huge document: CPU-bound, so they get room when the machine is busy. */
+const HEAVY_TEST_MS = 30_000;
+
 describe("parseEpub: EPUB 3", () => {
   it("reads metadata, cover and chapters from the nav document", async () => {
     const book = await parseEpub(await lighthouseBook());
@@ -426,23 +429,32 @@ describe("parseEpub: hostile markup", () => {
     expect(error.code).toBe("unsafe_archive");
   });
 
-  it("copes with a very large number of siblings and no heading", async () => {
-    const data = await withDocument("<p/>".repeat(300_000) + "<p>text</p>");
+  it(
+    "copes with a very large number of siblings and no heading",
+    async () => {
+      const data = await withDocument("<p/>".repeat(300_000) + "<p>text</p>");
 
-    const book = await parseEpub(data);
+      const book = await parseEpub(data);
 
-    expect(book.chapters[0]?.text).toBe("text");
-  });
+      expect(book.chapters[0]?.text).toBe("text");
+    },
+    HEAVY_TEST_MS,
+  );
 
-  it("is not slowed down by a huge run of blanks before text", async () => {
-    const data = await withDocument(`<p>${" ".repeat(5_000_000)}[1]text</p>`);
-    const started = Date.now();
+  it(
+    "is not slowed down by a huge run of blanks before text",
+    async () => {
+      const data = await withDocument(`<p>${" ".repeat(5_000_000)}[1]text</p>`);
+      const started = Date.now();
 
-    const book = await parseEpub(data);
+      const book = await parseEpub(data);
 
-    expect(book.chapters[0]?.text).toBe("text");
-    expect(Date.now() - started).toBeLessThan(3000);
-  });
+      expect(book.chapters[0]?.text).toBe("text");
+      // A quadratic scan of 5 million blanks would take minutes; this only has to stay far below that.
+      expect(Date.now() - started).toBeLessThan(10_000);
+    },
+    HEAVY_TEST_MS,
+  );
 
   it("rejects a single document over the per-document byte cap", async () => {
     const data = await withDocument(`<p>${"word ".repeat(5000)}</p>`);

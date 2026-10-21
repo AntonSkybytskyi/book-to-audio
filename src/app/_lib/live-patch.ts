@@ -18,7 +18,11 @@ export function patchBook(book: Book, event: AppEvent): Book | null {
             chunkCount: event.chunkCount,
             chunksDone: event.chunksDone,
             error: event.error,
+            regenError: event.regenError,
             durationSeconds: event.durationSeconds ?? chapter.durationSeconds,
+            // A chapter keeps its old audio while it is regenerated, so only a new file changes these.
+            audioVersion: event.audioVersion ?? chapter.audioVersion,
+            hasAudio: chapter.hasAudio || event.status === "done",
           }
         : chapter,
     );
@@ -36,10 +40,14 @@ export function patchBook(book: Book, event: AppEvent): Book | null {
   }
 
   if (event.type === "book" && event.bookId === book.id) {
-    // Every chapter changed with the status (Convert, in another tab): load them again.
-    if (event.status !== book.status) return null;
+    // Converting a ready book changes every chapter (Convert, in another tab): load them again.
+    // Any other change of status (pause, resume, done, regenerate) leaves the chapters to their own events.
+    if (event.status !== book.status && (book.status === "ready" || event.status === "ready")) {
+      return null;
+    }
     return {
       ...book,
+      status: event.status,
       doneCount: event.doneCount,
       failedCount: event.failedCount,
       durationSeconds: event.durationSeconds,
@@ -52,6 +60,11 @@ export function patchBook(book: Book, event: AppEvent): Book | null {
 /** Applies a live event to the library list, or returns null when it must be loaded again. */
 export function patchLibrary(books: BookSummary[], event: AppEvent): BookSummary[] | null {
   if (event.type === "book-added") return null;
+  if (event.type === "book-deleted") {
+    return books.some((book) => book.id === event.bookId)
+      ? books.filter((book) => book.id !== event.bookId)
+      : books;
+  }
   if (event.type !== "book") return books;
   if (!books.some((book) => book.id === event.bookId)) return null;
   return books.map((book) =>
