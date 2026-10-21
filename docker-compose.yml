@@ -1,0 +1,24 @@
+services:
+  app:
+    build: .
+    image: book-to-audio
+    # Published on localhost only. Exposing it to a network is not secured in v1.
+    ports:
+      - "127.0.0.1:${BOOK_TO_AUDIO_PORT:-3000}:3000"
+    volumes:
+      - book-data:/data
+    restart: unless-stopped
+    # Reap ffmpeg / Piper child processes.
+    init: true
+
+  # Lint, format check, typecheck and tests inside the container:
+  #   docker compose run --rm check
+  check:
+    build:
+      context: .
+      target: build
+    profiles: [tools]
+    command: pnpm check
+
+volumes:
+  book-data:
