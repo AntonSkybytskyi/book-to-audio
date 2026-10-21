@@ -1,0 +1,130 @@
+import type { FastifyInstance, FastifyReply } from "fastify";
+import { LANGUAGES, type Language } from "../books/languages.js";
+import type { BookRepository } from "../books/repository.js";
+import type { Storage } from "../books/storage.js";
+import { loadBookView, toSummaryView } from "../books/views.js";
+import { sendFile } from "../http/send-file.js";
+import { pickVoice, type TtsEngine } from "../tts/engine.js";
+import { sendError } from "./errors.js";
+
+export interface BookRouteDeps {
+  repo: BookRepository;
+  storage: Storage;
+  engine: TtsEngine;
+  /** Called after a book is queued so an idle scheduler wakes up. */
+  onQueued: () => void;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const LANGUAGE_NAMES: Record<Language, string> = { en: "English", uk: "Ukrainian", ru: "Russian" };
+
+export function registerBookRoutes(api: FastifyInstance, deps: BookRouteDeps) {
+  const { repo, storage, engine, onQueued } = deps;
+
+  const bookView = (id: string) => loadBookView(repo, engine, id);
+
+  /** Validates `:id` and loads the book, replying 400 or 404 itself when it cannot. */
+  const withBook = (id: string, reply: FastifyReply) => {
+    if (!UUID.test(id)) {
+      sendError(reply, 400, "invalid_id", "The book id is not valid.");
+      return null;
+    }
+    const book = repo.get(id);
+    if (!book) sendError(reply, 404, "not_found", "There is no book with this id.");
+    return book ?? null;
+  };
+
+  api.get("/books", async () => ({ books: repo.list().map(toSummaryView) }));
+
+  api.get<{ Params: { id: string } }>("/books/:id", async (req, reply) => {
+    const book = withBook(req.params.id, reply);
+    return book ? bookView(book.id) : reply;
+  });
+
+  api.patch<{ Params: { id: string }; Body: { language: Language } }>(
+    "/books/:id",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["language"],
+          additionalProperties: false,
+          properties: { language: { type: "string", enum: [...LANGUAGES] } },
+        },
+      },
+    },
+    async (req, reply) => {
+      const book = withBook(req.params.id, reply);
+      if (!book) return reply;
+      if (!repo.setLanguage(book.id, req.body.language)) {
+        return sendError(
+          reply,
+          409,
+          "conflict",
+          "The language can only be changed before converting.",
+        );
+      }
+      return bookView(book.id);
+    },
+  );
+
+  api.post<{ Params: { id: string } }>("/books/:id/convert", async (req, reply) => {
+    const book = withBook(req.params.id, reply);
+    if (!book) return reply;
+    if (book.status !== "ready") {
+      return sendError(
+        reply,
+        409,
+        "conflict",
+        "This book has already been converted or is converting.",
+      );
+    }
+    if (!pickVoice(engine, book.language)) {
+      const name = LANGUAGE_NAMES[book.language as Language] ?? book.language;
+      return sendError(
+        reply,
+        422,
+        "no_voice",
+        `No ${name} voice is installed yet. Pick another language.`,
+      );
+    }
+    // A concurrent request may have queued it first.
+    if (!repo.queue(book.id)) {
+      return sendError(
+        reply,
+        409,
+        "conflict",
+        "This book has already been converted or is converting.",
+      );
+    }
+    onQueued();
+    return reply.code(202).send(bookView(book.id));
+  });
+
+  api.get<{ Params: { id: string } }>("/books/:id/cover", async (req, reply) => {
+    const book = withBook(req.params.id, reply);
+    if (!book) return reply;
+    if (!book.coverPath || !book.coverMime) {
+      return sendError(reply, 404, "not_found", "This book has no cover.");
+    }
+    return sendFile(req, reply, storage.resolve(book.coverPath), book.coverMime);
+  });
+
+  api.get<{ Params: { id: string; position: string } }>(
+    "/books/:id/chapters/:position/audio",
+    async (req, reply) => {
+      const book = withBook(req.params.id, reply);
+      if (!book) return reply;
+      if (!/^[1-9]\d{0,5}$/.test(req.params.position)) {
+        return sendError(reply, 400, "invalid_position", "The chapter number is not valid.");
+      }
+      const chapter = repo.chapter(book.id, Number(req.params.position));
+      if (!chapter) return sendError(reply, 404, "not_found", "There is no such chapter.");
+      if (chapter.status !== "done" || !chapter.audioPath) {
+        return sendError(reply, 404, "not_ready", "This chapter has no audio yet.");
+      }
+      return sendFile(req, reply, storage.resolve(chapter.audioPath), "audio/webm");
+    },
+  );
+}

@@ -25,13 +25,15 @@ RUN pnpm build
 FROM build AS prod-deps
 RUN pnpm prune --prod
 
-# Piper TTS binary (voices are added by the TTS engine work).
-FROM debian:bookworm-slim AS piper
-ARG PIPER_VERSION=2023.11.14-2
-ARG TARGETARCH
+FROM debian:bookworm-slim AS fetch
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Piper TTS binary.
+FROM fetch AS piper
+ARG PIPER_VERSION=2023.11.14-2
+ARG TARGETARCH
 RUN set -eu; \
     case "$TARGETARCH" in \
       amd64) arch=x86_64;  sha=a50cb45f355b7af1f6d758c1b360717877ba0a398cc8cbe6d2a7a3a26e225992 ;; \
@@ -44,17 +46,31 @@ RUN set -eu; \
     tar -xzf /tmp/piper.tar.gz -C /opt; \
     rm /tmp/piper.tar.gz
 
+# Piper voice: en_US-lessac-medium from rhasspy/piper-voices at a pinned revision.
+FROM fetch AS voices
+ARG PIPER_VOICES_REVISION=5041a7a49ae5b3a0f30e6837769eb03fdbb231bd
+RUN set -eu; \
+    mkdir -p /opt/piper-voices; \
+    cd /opt/piper-voices; \
+    base="https://huggingface.co/rhasspy/piper-voices/resolve/${PIPER_VOICES_REVISION}/en/en_US/lessac/medium"; \
+    curl -fsSL -o en_US-lessac-medium.onnx "$base/en_US-lessac-medium.onnx"; \
+    curl -fsSL -o en_US-lessac-medium.onnx.json "$base/en_US-lessac-medium.onnx.json"; \
+    echo "5efe09e69902187827af646e1a6e9d269dee769f9877d17b16b1b46eeaaf019f  en_US-lessac-medium.onnx" | sha256sum -c -; \
+    echo "efe19c417bed055f2d69908248c6ba650fa135bc868b0e6abb3da181dab690a0  en_US-lessac-medium.onnx.json" | sha256sum -c -
+
 FROM base AS runtime
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=piper /opt/piper /opt/piper
 RUN ln -s /opt/piper/piper /usr/local/bin/piper
+COPY --from=voices /opt/piper-voices /opt/piper-voices
 
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=3000 \
-    DATA_DIR=/data
+    DATA_DIR=/data \
+    PIPER_VOICES_DIR=/opt/piper-voices
 
 COPY --from=prod-deps /app/node_modules ./node_modules
 # Next writes .next/cache at runtime.

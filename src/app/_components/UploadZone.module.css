@@ -1,0 +1,71 @@
+.zone {
+  border: 1.5px dashed var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-raised);
+  padding: 1.5rem 1.25rem;
+  margin-top: 2rem;
+  transition:
+    border-color 0.15s,
+    background-color 0.15s;
+}
+
+.dragging {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.title {
+  font-family: var(--font-serif);
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.hint {
+  color: var(--ink-muted);
+  margin-top: 0.25rem;
+}
+
+.choose {
+  margin-top: 1rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 1.25rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color 0.15s,
+    color 0.15s;
+}
+
+.choose:hover {
+  background: transparent;
+  color: var(--accent);
+}
+
+.hiddenInput {
+  display: none;
+}
+
+.progress {
+  margin-top: 0.75rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.fileName {
+  font-family: var(--font-serif);
+  overflow-wrap: anywhere;
+}
+
+.error {
+  color: var(--danger);
+  margin-top: 0.75rem;
+  min-height: 0;
+}
+
+.error:empty {
+  margin-top: 0;
+}

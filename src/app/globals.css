@@ -1,0 +1,86 @@
+:root {
+  --paper: #f5efe3;
+  --paper-raised: #fbf7ee;
+  --ink: #231f1a;
+  --ink-muted: #6b6256;
+  --rule: #ddd3c0;
+  --accent: #8a3b1f;
+  --accent-ink: #fff8ec;
+  --accent-soft: #ecd9c6;
+  --danger: #9b1c1c;
+
+  --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+
+  --column: 44rem;
+  --gutter: 1.25rem;
+  --radius: 4px;
+
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #1a1612;
+    --paper-raised: #231e18;
+    --ink: #ece4d4;
+    --ink-muted: #a79d8c;
+    --rule: #3a3329;
+    --accent: #e59b73;
+    --accent-ink: #1a1612;
+    --accent-soft: #3d2c20;
+    --danger: #f08a7a;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--accent);
+  text-underline-offset: 0.2em;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -38,4 +38,60 @@ describe("loadConfig", () => {
   it.each(["abc", "0", "65536", "80.5", ""])("rejects PORT=%j", (port) => {
     expect(() => loadConfig({ PORT: port })).toThrow(/PORT/);
   });
+
+  it("uses Piper, ffmpeg and a 200 MB upload limit by default", () => {
+    const config = loadConfig({});
+
+    expect(config).toMatchObject({
+      maxUploadMb: 200,
+      ttsEngine: "piper",
+      piperBin: "piper",
+      piperVoicesDir: "/opt/piper-voices",
+      ffmpegBin: "ffmpeg",
+      opusBitrate: "32k",
+      fakeTtsDelayMs: 0,
+      allowedHosts: [],
+    });
+  });
+
+  it("reads the upload, TTS and audio settings", () => {
+    const config = loadConfig({
+      MAX_UPLOAD_MB: "5",
+      TTS_ENGINE: "fake",
+      PIPER_BIN: "/opt/piper/piper",
+      PIPER_VOICES_DIR: "/voices",
+      FFMPEG_BIN: "/usr/bin/ffmpeg",
+      OPUS_BITRATE: "48k",
+      FAKE_TTS_DELAY_MS: "250",
+      ALLOWED_HOSTS: "Books.lan, nas.local,,",
+    });
+
+    expect(config).toMatchObject({
+      maxUploadMb: 5,
+      ttsEngine: "fake",
+      piperBin: "/opt/piper/piper",
+      piperVoicesDir: "/voices",
+      ffmpegBin: "/usr/bin/ffmpeg",
+      opusBitrate: "48k",
+      fakeTtsDelayMs: 250,
+      allowedHosts: ["books.lan", "nas.local"],
+    });
+  });
+
+  it("treats empty numeric settings as unset", () => {
+    expect(loadConfig({ MAX_UPLOAD_MB: "", FAKE_TTS_DELAY_MS: "" })).toMatchObject({
+      maxUploadMb: 200,
+      fakeTtsDelayMs: 0,
+    });
+  });
+
+  it.each([
+    { MAX_UPLOAD_MB: "0" },
+    { MAX_UPLOAD_MB: "lots" },
+    { TTS_ENGINE: "espeak" },
+    { OPUS_BITRATE: "32" },
+    { FAKE_TTS_DELAY_MS: "-1" },
+  ])("rejects %j", (env) => {
+    expect(() => loadConfig(env)).toThrow(/Invalid/);
+  });
 });
