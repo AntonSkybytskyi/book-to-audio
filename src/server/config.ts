@@ -20,6 +20,16 @@ export interface Config {
   allowedHosts: string[];
   /** Artificial delay per chunk for the fake engine, to see progress in the UI. */
   fakeTtsDelayMs: number;
+  /** Chunks containing this text always fail in the fake engine (development only). */
+  fakeTtsFailMarker: string | undefined;
+  /** Chunks containing this text always fail as unreadable text, which does not count towards pausing the pool (development only). */
+  fakeTtsBadMarker: string | undefined;
+  /** Chunks containing this text fail twice, then succeed, in the fake engine (development only). */
+  fakeTtsFlakyMarker: string | undefined;
+  /** Conversion pauses when less than this many megabytes are free on the data disk. */
+  minFreeDiskMb: number;
+  /** Default number of workers; a value saved in the settings wins. */
+  workers: number | undefined;
 }
 
 export function loadConfig(env: Record<string, string | undefined> = process.env): Config {
@@ -39,7 +49,12 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
       .split(",")
       .map((host) => host.trim().toLowerCase())
       .filter(Boolean),
+    minFreeDiskMb: parseInteger("MIN_FREE_DISK_MB", env.MIN_FREE_DISK_MB, 500, 0, 100_000_000),
     fakeTtsDelayMs: parseInteger("FAKE_TTS_DELAY_MS", env.FAKE_TTS_DELAY_MS, 0, 0, 60_000),
+    fakeTtsFailMarker: env.FAKE_TTS_FAIL_MARKER || undefined,
+    fakeTtsFlakyMarker: env.FAKE_TTS_FLAKY_MARKER || undefined,
+    fakeTtsBadMarker: env.FAKE_TTS_BAD_MARKER || undefined,
+    workers: env.WORKERS ? parseInteger("WORKERS", env.WORKERS, 1, 1, 256) : undefined,
   };
 }
 

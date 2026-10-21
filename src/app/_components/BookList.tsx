@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { getBooks, type BookSummary } from "../_lib/api";
 import { formatClock, formatMinutes, languageName, pluralize } from "../_lib/format";
 import { BookCover } from "./BookCover";
+import { useLiveEvents, useLiveStatus } from "../_lib/events";
+import { patchLibrary } from "../_lib/live-patch";
 import { usePoll } from "../_lib/use-poll";
 import { ProgressBar } from "./ProgressBar";
 import styles from "./BookList.module.css";
@@ -36,15 +38,21 @@ export function BookList() {
 }
 
 function Shelf({ onRetry }: { onRetry: () => void }) {
+  const live = useLiveStatus() === "live";
   const {
     data: books,
     error,
     stale,
+    patch,
   } = usePoll({
     load: getBooks,
     keepPolling: anyConverting,
     intervalMs: POLL_MS,
+    live,
   });
+  useLiveEvents(
+    useCallback((event, seq) => patch((current) => patchLibrary(current, event), seq), [patch]),
+  );
 
   if (books === null && error === null) {
     return (

@@ -42,7 +42,18 @@ Settings come from environment variables:
 | `FFMPEG_BIN`         | `ffmpeg`              | ffmpeg executable                                                                              |
 | `OPUS_BITRATE`       | `32k`                 | Bitrate of the chapter WebM/Opus files                                                         |
 | `ALLOWED_HOSTS`      | —                     | Extra host names the app answers to, comma separated. `localhost`, `127.0.0.1` and `[::1]` always work |
+| `WORKERS`            | half the CPU cores    | Default number of chapters converted at the same time (at least 1). A value saved on the Settings page wins |
+| `MIN_FREE_DISK_MB`   | `500`                 | Conversion pauses (banner, Resume) when less than this is free on the disk that holds `DATA_DIR` |
 | `FAKE_TTS_DELAY_MS`  | `0`                   | Delay per chunk for the fake engine, to watch progress in the UI                               |
+| `FAKE_TTS_FAIL_MARKER` | —                   | Fake engine, dev only: any chunk whose text contains this always fails (a chapter fails after 4 attempts) |
+| `FAKE_TTS_BAD_MARKER` | —                    | Fake engine, dev only: any chunk whose text contains this always fails like unreadable text, which does not count towards pausing the pool |
+| `FAKE_TTS_FLAKY_MARKER` | —                  | Fake engine, dev only: any chunk whose text contains this fails its first 2 attempts, then succeeds |
+
+Conversion runs on a pool of workers (Settings page, or `GET`/`PATCH /api/settings`). Each worker keeps one Piper process (`PIPER_BIN` must be the Piper binary or a script that `exec`s it; its process group is killed on timeout), and progress is saved per chunk: each chunk is encoded to Opus as soon as it is read and kept in `audio/<book>/<NN>.parts/`, so after a restart a chapter continues from its last finished chunk, and the chapter file is made by joining the chunks without re-encoding. Chunks are only reused when the engine, voice, sample rate and chunk count are unchanged. A failed chunk is retried three times; three chapters failing in a row (text that cannot be read does not count) pause the pool until it is resumed, and so does a nearly full disk (`POST /api/pool/resume`, or the banner in the app). Live updates come from `GET /api/events` (server-sent events). To try the failure handling, run the fake engine with markers and put the marker text in a chapter:
+
+```bash
+TTS_ENGINE=fake FAKE_TTS_FAIL_MARKER='[fail]' FAKE_TTS_FLAKY_MARKER='[flaky]' pnpm dev
+```
 
 Requests whose `Host` header is not a local name get 403 (this stops DNS rebinding), and so do POST/PATCH requests that come from another origin. Set `ALLOWED_HOSTS` if you open the app by another name, for example `ALLOWED_HOSTS=books.lan`.
 
@@ -67,7 +78,8 @@ The same checks run in the container with `docker compose run --rm check`.
 - `src/server`: Fastify server, config and SQLite (`db/migrations.ts` holds the schema migrations).
   - `epub/`: EPUB parser ([why in-house](docs/decisions/epub-parser.md)).
   - `tts/`: engine interface, Piper and fake engines, text chunking.
-  - `audio/`: ffmpeg wrapper. `convert/`: chapter conversion and the scheduler.
+  - `audio/`: ffmpeg wrapper. `convert/`: chapter conversion, chunk store and the worker pool.
+  - `events/`: in-process event bus behind `GET /api/events`. `settings/`: owner settings.
   - `books/`: storage paths, repository and chapter queue. `routes/`: HTTP API under `/api`.
-- `src/app`: Next.js App Router pages (library, preview, book page).
+- `src/app`: Next.js App Router pages (library, preview, book page, settings).
 - `fixtures/`: small generated EPUBs. `scripts/`: fixture generator.

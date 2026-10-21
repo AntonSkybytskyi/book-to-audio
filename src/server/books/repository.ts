@@ -35,6 +35,8 @@ export interface Chapter {
   error: string | null;
   audioPath: string | null;
   durationSeconds: number | null;
+  chunkCount: number;
+  chunksDone: number;
 }
 
 export interface NewBook {
@@ -83,6 +85,8 @@ interface ChapterRow {
   error: string | null;
   audio_path: string | null;
   duration_seconds: number | null;
+  chunk_count: number;
+  chunks_done: number;
 }
 
 const toBook = (row: BookRow): Book => ({
@@ -107,6 +111,8 @@ const toChapter = (row: ChapterRow): Chapter => ({
   error: row.error,
   audioPath: row.audio_path,
   durationSeconds: row.duration_seconds,
+  chunkCount: row.chunk_count,
+  chunksDone: row.chunks_done,
 });
 
 const TOTALS_SQL = `
@@ -169,7 +175,7 @@ export class BookRepository {
     const rows = this.db
       .prepare(
         `SELECT position, title, char_count, word_count, status, progress, error, audio_path,
-                duration_seconds
+                duration_seconds, chunk_count, chunks_done
          FROM chapters WHERE book_id = ? ORDER BY position`,
       )
       .all(bookId) as ChapterRow[];
@@ -180,7 +186,7 @@ export class BookRepository {
     const row = this.db
       .prepare(
         `SELECT position, title, char_count, word_count, status, progress, error, audio_path,
-                duration_seconds
+                duration_seconds, chunk_count, chunks_done
          FROM chapters WHERE book_id = ? AND position = ?`,
       )
       .get(bookId, position) as ChapterRow | undefined;
@@ -210,7 +216,8 @@ export class BookRepository {
         if (result.changes === 0) return false;
         this.db
           .prepare(
-            `UPDATE chapters SET status = 'queued', progress = 0, error = NULL, updated_at = ${NOW}
+            `UPDATE chapters SET status = 'queued', progress = 0, chunk_count = 0, chunks_done = 0,
+               error = NULL, updated_at = ${NOW}
              WHERE book_id = ?`,
           )
           .run(id);

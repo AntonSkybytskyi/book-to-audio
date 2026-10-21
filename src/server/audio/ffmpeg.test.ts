@@ -5,7 +5,15 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ProcessRunner, RunResult } from "../process.js";
 import { FakeEngine } from "../tts/fake.js";
 import { hasBinary } from "../testing/binaries.js";
-import { buildEncodeArgs, encodeWebm, EncodeError, pcmDurationSeconds } from "./ffmpeg.js";
+import {
+  buildConcatArgs,
+  buildEncodeArgs,
+  concatList,
+  concatWebm,
+  encodeWebm,
+  EncodeError,
+  lastProgressSeconds,
+} from "./ffmpeg.js";
 
 const result = (overrides: Partial<RunResult> = {}): RunResult => ({
   code: 0,
@@ -15,6 +23,11 @@ const result = (overrides: Partial<RunResult> = {}): RunResult => ({
   aborted: false,
   ...overrides,
 });
+
+async function* oneAndThreeSeconds() {
+  yield Buffer.alloc(22050);
+  yield Buffer.alloc(22050 * 3);
+}
 
 const options = (run: ProcessRunner) => ({ ffmpegBin: "ffmpeg", bitrate: "32k", run });
 
@@ -45,17 +58,9 @@ describe("buildEncodeArgs", () => {
   });
 });
 
-describe("pcmDurationSeconds", () => {
-  it("divides samples by the sample rate", () => {
-    expect(pcmDurationSeconds({ sampleRate: 1000, channels: 1, samples: Buffer.alloc(3000) })).toBe(
-      1.5,
-    );
-  });
-});
-
 describe("encodeWebm", () => {
   let dir: string;
-  const pcm = { sampleRate: 22050, channels: 1 as const, samples: Buffer.alloc(44100) };
+  const pcm = { sampleRate: 22050, samples: Buffer.alloc(44100) };
 
   beforeEach(() => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "ffmpeg-test-"));
@@ -81,6 +86,25 @@ describe("encodeWebm", () => {
     expect(seen?.input).toBe(pcm.samples);
     expect(seen?.args.at(-1)).not.toBe(out); // ffmpeg wrote to a temp file
     expect(fs.readdirSync(dir)).toEqual(["01.webm"]);
+  });
+
+  it("streams chunks without joining them and measures the length from what went through", async () => {
+    const out = path.join(dir, "01.webm");
+    let received = 0;
+    const run: ProcessRunner = async (_cmd, args, opts) => {
+      expect(Buffer.isBuffer(opts.input)).toBe(false);
+      for await (const chunk of opts.input as AsyncIterable<Buffer>) received += chunk.length;
+      fs.writeFileSync(args.at(-1) as string, "webm bytes");
+      return result();
+    };
+    const encoded = await encodeWebm(
+      { sampleRate: 22050, samples: oneAndThreeSeconds() },
+      out,
+      options(run),
+    );
+
+    expect(received).toBe(22050 * 4);
+    expect(encoded.durationSeconds).toBe(2);
   });
 
   it("leaves no file behind and keeps the old one when ffmpeg fails", async () => {
@@ -112,16 +136,132 @@ describe("encodeWebm", () => {
   });
 });
 
+const progress = (seconds: number) =>
+  Buffer.from(`out_time_us=1000\nout_time_us=${Math.round(seconds * 1e6)}\nprogress=end\n`);
+
+const failingMuxer: ProcessRunner = async (_cmd, args) => {
+  fs.writeFileSync(args.at(-1) as string, "partial");
+  return result({ code: 1, stderr: "Error while demuxing" });
+};
+
+describe("concatWebm", () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "concat-test-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("copies the packets of the listed files into one file and reads the length from the progress report", async () => {
+    const out = path.join(dir, "01.webm");
+    let seen: { args: readonly string[]; list: string } | undefined;
+    const run: ProcessRunner = async (_cmd, args) => {
+      const listPath = args[args.indexOf("-i") + 1] as string;
+      seen = { args, list: fs.readFileSync(listPath, "utf8") };
+      fs.writeFileSync(args.at(-1) as string, "joined");
+      return result({ stdout: progress(61.5) });
+    };
+
+    const joined = await concatWebm(["/a/00000.webm", "/a/00001.webm"], out, options(run));
+
+    expect(joined.durationSeconds).toBe(61.5);
+    expect(fs.readFileSync(out, "utf8")).toBe("joined");
+    expect(seen?.list).toBe("file '/a/00000.webm'\nfile '/a/00001.webm'\n");
+    expect(seen?.args).toContain("copy"); // nothing is encoded twice
+    expect(seen?.args.at(-1)).not.toBe(out); // written to a temp file first
+    expect(fs.readdirSync(dir)).toEqual(["01.webm"]); // list and temp are gone
+  });
+
+  const silentProgress: ProcessRunner = async (_cmd, args) => {
+    fs.writeFileSync(args.at(-1) as string, "joined");
+    return result({ stdout: Buffer.from("out_time_us=N/A\nprogress=end\n") });
+  };
+
+  it("takes the summed chunk lengths when ffmpeg does not report the length", async () => {
+    const out = path.join(dir, "01.webm");
+
+    const joined = await concatWebm(["/a.webm"], out, options(silentProgress), undefined, 12.25);
+
+    expect(joined.durationSeconds).toBe(12.25);
+    expect(fs.readFileSync(out, "utf8")).toBe("joined");
+  });
+
+  it("fails, leaving nothing behind, when neither ffmpeg nor the chunks give a length", async () => {
+    const out = path.join(dir, "01.webm");
+
+    for (const fallback of [undefined, null, 0]) {
+      await expect(
+        concatWebm(["/a.webm"], out, options(silentProgress), undefined, fallback),
+      ).rejects.toMatchObject({ name: "EncodeError", message: expect.stringContaining("length") });
+    }
+    expect(fs.readdirSync(dir)).toEqual([]);
+  });
+
+  it("leaves nothing behind and keeps the old file when ffmpeg fails", async () => {
+    const out = path.join(dir, "01.webm");
+    fs.writeFileSync(out, "old audio");
+    const run = failingMuxer;
+
+    await expect(concatWebm(["/a.webm"], out, options(run))).rejects.toMatchObject({
+      message: "The audio could not be encoded.",
+      detail: expect.stringMatching(/code 1.*demuxing/),
+    });
+
+    expect(fs.readdirSync(dir)).toEqual(["01.webm"]);
+    expect(fs.readFileSync(out, "utf8")).toBe("old audio");
+  });
+
+  it("reports a missing binary, a timeout and a cancel", async () => {
+    const out = path.join(dir, "a.webm");
+
+    await expect(concatWebm(["/a.webm"], out, options(missingBinary))).rejects.toThrow(
+      /not installed/,
+    );
+    await expect(concatWebm(["/a.webm"], out, options(timedOut))).rejects.toThrow(/too long/);
+    await expect(concatWebm(["/a.webm"], out, options(aborted))).rejects.toBeInstanceOf(
+      EncodeError,
+    );
+    expect(fs.readdirSync(dir)).toEqual([]);
+  });
+});
+
+describe("concat helpers", () => {
+  it("builds the arguments for joining without re-encoding", () => {
+    expect(buildConcatArgs({ listPath: "/l.list", outputPath: "/o.tmp" }).join(" ")).toBe(
+      "-hide_banner -loglevel error -nostats -progress pipe:1 -f concat -safe 0 -i /l.list -c copy -f webm -y /o.tmp",
+    );
+  });
+
+  it("quotes file names the way the concat demuxer reads them", () => {
+    expect(concatList(["/data/it's here/00000.webm"])).toBe(
+      "file '/data/it'\\''s here/00000.webm'\n",
+    );
+  });
+
+  it("writes absolute paths, which the demuxer needs, whatever it was given", () => {
+    expect(concatList(["chunks/00000.webm"])).toBe(`file '${path.resolve("chunks/00000.webm")}'\n`);
+  });
+
+  it("takes the last progress line as the length", () => {
+    expect(
+      lastProgressSeconds("out_time_us=5000000\nprogress=continue\nout_time_us=7250000\n"),
+    ).toBe(7.25);
+    expect(lastProgressSeconds("nothing here")).toBeNull();
+    expect(lastProgressSeconds("out_time_us=N/A\nprogress=end\n")).toBeNull();
+    expect(lastProgressSeconds("out_time_us=0\n")).toBeNull();
+  });
+});
+
 // Needs a real ffmpeg: skipped on hosts without it, runs in the Docker image.
 describe.skipIf(!hasBinary("ffmpeg"))("encodeWebm with ffmpeg", () => {
   it("writes a mono Opus WebM file of the right length", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ffmpeg-real-"));
     try {
-      const pcm = await new FakeEngine().synthesize({
-        text: "x".repeat(150),
-        voiceId: "fake-en",
-        speed: 1,
-      });
+      const session = await new FakeEngine().open("fake-en");
+      const pcm = await session.synthesize("x".repeat(150));
       const out = path.join(dir, "01.webm");
 
       const { durationSeconds } = await encodeWebm(pcm, out, {
@@ -132,6 +272,31 @@ describe.skipIf(!hasBinary("ffmpeg"))("encodeWebm with ffmpeg", () => {
       const head = fs.readFileSync(out).subarray(0, 4);
       expect([...head]).toEqual([0x1a, 0x45, 0xdf, 0xa3]); // EBML header
       expect(durationSeconds).toBeCloseTo(10, 0);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("joins separately encoded chunks into one file of the summed length", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ffmpeg-real-"));
+    try {
+      const session = await new FakeEngine().open("fake-en");
+      const files: string[] = [];
+      for (let i = 0; i < 3; i++) {
+        const pcm = await session.synthesize("x".repeat(60 + i * 30));
+        const file = path.join(dir, `0000${i}.webm`);
+        await encodeWebm(pcm, file, { ffmpegBin: "ffmpeg", bitrate: "32k" });
+        files.push(file);
+      }
+      const out = path.join(dir, "joined.webm");
+
+      const { durationSeconds } = await concatWebm(files, out, {
+        ffmpegBin: "ffmpeg",
+        bitrate: "32k",
+      });
+
+      expect([...fs.readFileSync(out).subarray(0, 4)]).toEqual([0x1a, 0x45, 0xdf, 0xa3]);
+      expect(durationSeconds).toBeCloseTo(4 + 6 + 8, 0);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

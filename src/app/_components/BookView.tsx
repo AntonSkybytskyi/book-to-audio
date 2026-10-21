@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import { audioUrl, type Book } from "../_lib/api";
 import { formatClock, pluralize } from "../_lib/format";
 import { useBook } from "../_lib/use-book";
+import { usePool } from "../_lib/pool-store";
 import { BookHeader } from "./BookHeader";
 import { ChapterRow } from "./ChapterRow";
 import { LoadState } from "./LoadState";
@@ -22,12 +23,14 @@ function overallProgress(book: Book): number {
   return sum / book.chapters.length;
 }
 
-function summary(book: Book): string {
+function summary(book: Book, poolPaused: boolean): string {
   const total = pluralize(book.chapterCount, "chapter");
   switch (book.status) {
     case "ready":
       return "Not converted yet.";
     case "converting":
+      if (poolPaused)
+        return `Waiting for conversion to resume: ${book.doneCount} of ${total} ready.`;
       return `Converting: ${book.doneCount} of ${total} ready.`;
     case "paused":
       return `Paused: ${book.doneCount} of ${total} ready.`;
@@ -40,6 +43,7 @@ function summary(book: Book): string {
 
 export function BookView({ id }: { id: string }) {
   const { data: book, error, stale } = useBook(id);
+  const pool = usePool();
   const audio = useRef<HTMLAudioElement>(null);
   const [current, setCurrent] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -85,7 +89,7 @@ export function BookView({ id }: { id: string }) {
           <ProgressBar value={overallProgress(book)} label="Overall conversion progress" />
         )}
         <p className={styles.summary} role="status" aria-live="polite">
-          {summary(book)}
+          {summary(book, pool?.state === "paused")}
         </p>
         {book.status === "ready" && (
           <Link href={`/books/${book.id}/preview`} className={`${shared.button} ${styles.cta}`}>

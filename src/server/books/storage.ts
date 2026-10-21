@@ -37,6 +37,11 @@ export class Storage {
     return path.join("audio", bookId, `${String(position).padStart(2, "0")}.webm`);
   }
 
+  /** Where the finished chunks of a chapter wait until the chapter is encoded. */
+  partsDir(bookId: string, position: number): string {
+    return path.join(this.audioDir(bookId), `${String(position).padStart(2, "0")}.parts`);
+  }
+
   /** Absolute path for a relative path stored in the database. */
   resolve(relPath: string): string {
     const full = path.resolve(this.dataDir, relPath);

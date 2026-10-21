@@ -13,6 +13,9 @@ export interface ChapterView {
   wordCount: number;
   estimatedMinutes: number;
   durationSeconds: number | null;
+  /** Chunks the chapter is split into (0 until it starts) and how many are finished. */
+  chunkCount: number;
+  chunksDone: number;
 }
 
 export interface BookSummaryView {
@@ -63,6 +66,8 @@ export const toChapterView = (chapter: Chapter): ChapterView => ({
   wordCount: chapter.wordCount,
   estimatedMinutes: estimateMinutes(chapter.wordCount),
   durationSeconds: chapter.durationSeconds,
+  chunkCount: chapter.chunkCount,
+  chunksDone: chapter.chunksDone,
 });
 
 /** A book with its chapters, or null when it does not exist. */

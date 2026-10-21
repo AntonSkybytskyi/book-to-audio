@@ -3,7 +3,9 @@ import { LANGUAGES, type Language } from "../books/languages.js";
 import type { BookRepository } from "../books/repository.js";
 import type { Storage } from "../books/storage.js";
 import { loadBookView, toSummaryView } from "../books/views.js";
+import type { EventBus } from "../events/bus.js";
 import { sendFile } from "../http/send-file.js";
+import type { PoolControl } from "../convert/pool.js";
 import { pickVoice, type TtsEngine } from "../tts/engine.js";
 import { sendError } from "./errors.js";
 
@@ -11,8 +13,9 @@ export interface BookRouteDeps {
   repo: BookRepository;
   storage: Storage;
   engine: TtsEngine;
-  /** Called after a book is queued so an idle scheduler wakes up. */
-  onQueued: () => void;
+  bus: EventBus;
+  /** Wakes idle workers after a book is queued. */
+  pool: Pick<PoolControl, "notify">;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -20,7 +23,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const LANGUAGE_NAMES: Record<Language, string> = { en: "English", uk: "Ukrainian", ru: "Russian" };
 
 export function registerBookRoutes(api: FastifyInstance, deps: BookRouteDeps) {
-  const { repo, storage, engine, onQueued } = deps;
+  const { repo, storage, engine, bus, pool } = deps;
 
   const bookView = (id: string) => loadBookView(repo, engine, id);
 
@@ -98,8 +101,21 @@ export function registerBookRoutes(api: FastifyInstance, deps: BookRouteDeps) {
         "This book has already been converted or is converting.",
       );
     }
-    onQueued();
-    return reply.code(202).send(bookView(book.id));
+    // The workers write here; it is made now and never by them, so a deleted book stays deleted.
+    storage.ensureAudioDir(book.id);
+    const view = bookView(book.id);
+    if (view) {
+      bus.publish({
+        type: "book",
+        bookId: book.id,
+        status: view.status,
+        doneCount: view.doneCount,
+        failedCount: view.failedCount,
+        durationSeconds: view.durationSeconds,
+      });
+    }
+    pool.notify();
+    return reply.code(202).send(view);
   });
 
   api.get<{ Params: { id: string } }>("/books/:id/cover", async (req, reply) => {

@@ -51,6 +51,44 @@ describe("loadConfig", () => {
       opusBitrate: "32k",
       fakeTtsDelayMs: 0,
       allowedHosts: [],
+      workers: undefined,
+      minFreeDiskMb: 500,
+      fakeTtsFailMarker: undefined,
+      fakeTtsFlakyMarker: undefined,
+      fakeTtsBadMarker: undefined,
+    });
+  });
+
+  it("reads the free-space margin and rejects nonsense", () => {
+    expect(loadConfig({ MIN_FREE_DISK_MB: "2048" }).minFreeDiskMb).toBe(2048);
+    expect(loadConfig({ MIN_FREE_DISK_MB: "0" }).minFreeDiskMb).toBe(0);
+    expect(() => loadConfig({ MIN_FREE_DISK_MB: "lots" })).toThrow(/MIN_FREE_DISK_MB/);
+  });
+
+  it("reads the worker count and the fake engine failure markers", () => {
+    const config = loadConfig({
+      WORKERS: "3",
+      FAKE_TTS_FAIL_MARKER: "[fail]",
+      FAKE_TTS_FLAKY_MARKER: "[flaky]",
+      FAKE_TTS_BAD_MARKER: "[bad]",
+    });
+
+    expect(config).toMatchObject({
+      workers: 3,
+      fakeTtsFailMarker: "[fail]",
+      fakeTtsFlakyMarker: "[flaky]",
+      fakeTtsBadMarker: "[bad]",
+    });
+  });
+
+  it.each(["0", "-1", "two", "1.5", "999"])("rejects WORKERS=%s", (value) => {
+    expect(() => loadConfig({ WORKERS: value })).toThrow(/WORKERS/);
+  });
+
+  it("treats empty WORKERS and markers as unset", () => {
+    expect(loadConfig({ WORKERS: "", FAKE_TTS_FAIL_MARKER: "" })).toMatchObject({
+      workers: undefined,
+      fakeTtsFailMarker: undefined,
     });
   });
 

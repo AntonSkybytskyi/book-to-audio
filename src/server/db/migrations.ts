@@ -60,4 +60,41 @@ export const migrations: Migration[] = [
       CREATE INDEX books_queue ON books (status, queued_at);
     `,
   },
+  {
+    id: 3,
+    name: "chapter_pool",
+    sql: `
+      -- Progress is saved per chunk: chunk_count is fixed when the chapter starts,
+      -- chunks_done is how many have been written to disk.
+      ALTER TABLE chapters ADD COLUMN chunk_count INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE chapters ADD COLUMN chunks_done INTEGER NOT NULL DEFAULT 0;
+      -- Bumped each time a worker claims the chapter. Updates from a worker only
+      -- apply while the claim it holds is the current one.
+      ALTER TABLE chapters ADD COLUMN claim INTEGER NOT NULL DEFAULT 0;
+
+      CREATE TABLE settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+      ) STRICT;
+
+      -- One row. 'paused' is set by the circuit breaker and cleared by Resume.
+      CREATE TABLE pool_state (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        state TEXT NOT NULL DEFAULT 'running' CHECK (state IN ('running', 'paused')),
+        error TEXT,
+        consecutive_failures INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+      ) STRICT;
+      INSERT INTO pool_state (id) VALUES (1);
+    `,
+  },
+  {
+    id: 4,
+    name: "pool_pause_cause",
+    sql: `
+      -- Why the pool is paused, so the app can say what to fix: chapters kept failing, or the disk is full.
+      ALTER TABLE pool_state ADD COLUMN cause TEXT CHECK (cause IN ('failures', 'disk'));
+    `,
+  },
 ];

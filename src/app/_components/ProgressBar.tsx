@@ -6,13 +6,15 @@ interface Props {
   value: number;
   label: string;
   thin?: boolean;
+  /** Full but not finished: the bar pulses instead of sitting at 100%. */
+  busy?: boolean;
 }
 
-export function ProgressBar({ value, label, thin }: Props) {
+export function ProgressBar({ value, label, thin, busy }: Props) {
   const percent = Math.round(Math.min(1, Math.max(0, value)) * 100);
   return (
     <div
-      className={cx(styles.track, thin && styles.thin)}
+      className={cx(styles.track, thin && styles.thin, busy && styles.busy)}
       role="progressbar"
       aria-label={label}
       aria-valuemin={0}

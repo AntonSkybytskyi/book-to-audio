@@ -1,4 +1,5 @@
 import type { Chapter } from "../_lib/api";
+import { isFinishing } from "../_lib/chapter";
 import { cx } from "../_lib/cx";
 import { formatClock } from "../_lib/format";
 import { ProgressBar } from "./ProgressBar";
@@ -18,6 +19,8 @@ function Status({ chapter }: { chapter: Chapter }) {
     case "queued":
       return <span className={styles.muted}>Waiting</span>;
     case "generating":
+      // Every chunk is read; what is left is joining them into the chapter's file.
+      if (isFinishing(chapter)) return <span className={styles.working}>Finishing…</span>;
       return (
         <span className={styles.working}>Reading aloud {Math.round(chapter.progress * 100)}%</span>
       );
@@ -69,6 +72,7 @@ export function ChapterRow({ chapter, playing, current, onToggle }: Props) {
         {chapter.status === "generating" && (
           <ProgressBar
             thin
+            busy={isFinishing(chapter)}
             value={chapter.progress}
             label={`Chapter ${chapter.position} progress`}
           />

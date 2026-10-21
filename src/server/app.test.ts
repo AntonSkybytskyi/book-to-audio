@@ -32,6 +32,9 @@ describe("buildServer", () => {
       engine: ctx.engine,
       maxUploadBytes: 1024 * 1024,
       parseEpub: ctx.parseEpub,
+      bus: ctx.bus,
+      pool: ctx.pool,
+      settings: ctx.settings,
     });
   });
 
@@ -116,6 +119,9 @@ describe("buildServer", () => {
       engine: ctx.engine,
       maxUploadBytes: 1024,
       parseEpub: ctx.parseEpub,
+      bus: ctx.bus,
+      pool: ctx.pool,
+      settings: ctx.settings,
       logger: {
         level: "info",
         stream: {

@@ -5,6 +5,8 @@ export interface Voice {
   /** Two-letter language code, for example `en`. */
   language: string;
   name: string;
+  /** Sample rate of the audio the voice produces, in Hz. */
+  sampleRate: number;
 }
 
 /** Raw 16-bit little-endian mono PCM. */
@@ -14,12 +16,15 @@ export interface PcmAudio {
   samples: Buffer;
 }
 
-export interface SynthesizeRequest {
-  text: string;
-  voiceId: string;
-  /** 1.0 is normal speed. */
-  speed: number;
-  signal?: AbortSignal;
+/**
+ * A long-lived connection to one voice, so the model is loaded once and then
+ * reused for every chunk. One caller at a time. A session that throws is broken:
+ * close it and open a new one.
+ */
+export interface TtsSession {
+  synthesize(text: string, signal?: AbortSignal): Promise<PcmAudio>;
+  /** Stops the engine process and waits until it is gone. Safe to call twice. */
+  close(): Promise<void>;
 }
 
 export interface TtsEngine {
@@ -28,7 +33,7 @@ export interface TtsEngine {
   /** Longest text, in characters, that one `synthesize` call accepts. */
   readonly maxInputChars: number;
   voices(): Voice[];
-  synthesize(request: SynthesizeRequest): Promise<PcmAudio>;
+  open(voiceId: string): Promise<TtsSession>;
 }
 
 export type TtsErrorCode =
@@ -36,6 +41,7 @@ export type TtsErrorCode =
   | "engine_unavailable" // the binary or service could not be started
   | "synthesis_failed"
   | "timeout"
+  | "bad_input" // this text cannot be read aloud; says nothing about the engine
   | "aborted";
 
 export class TtsError extends UserFacingError {

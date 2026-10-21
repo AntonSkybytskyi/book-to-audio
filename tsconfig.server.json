@@ -13,5 +13,5 @@
     "sourceMap": true
   },
   "include": ["src/server/**/*.ts"],
-  "exclude": ["src/**/*.test.ts"]
+  "exclude": ["src/**/*.test.ts", "src/server/testing/pool-harness.ts"]
 }

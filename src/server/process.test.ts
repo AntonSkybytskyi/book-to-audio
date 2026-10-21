@@ -1,6 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { runProcess } from "./process.js";
 
+async function* hello() {
+  yield Buffer.from("hel");
+  yield Buffer.from("lo");
+}
+
+async function* manyKilobytes() {
+  for (let i = 0; i < 64; i++) yield Buffer.alloc(64 * 1024);
+}
+
+async function* broken() {
+  yield Buffer.from("partial");
+  throw Object.assign(new Error("disk went away"), { code: "ENOENT" });
+}
+
 const node = (code: string) => [process.execPath, ["-e", code]] as const;
 
 describe("runProcess", () => {
@@ -21,6 +35,48 @@ describe("runProcess", () => {
     const result = await runProcess(cmd, args, { input: "hello", timeoutMs: 5000 });
 
     expect(result.stdout.toString()).toBe("hello");
+  });
+
+  it("streams an async iterable to stdin", async () => {
+    const [cmd, args] = node(`process.stdin.pipe(process.stdout)`);
+    const result = await runProcess(cmd, args, { input: hello(), timeoutMs: 5000 });
+
+    expect(result.stdout.toString()).toBe("hello");
+  });
+
+  it("streams more than the pipe buffer holds, waiting for the process to read it", async () => {
+    const [cmd, args] = node(
+      `let n = 0; process.stdin.on("data", (d) => (n += d.length)); process.stdin.on("end", () => process.stdout.write(String(n)))`,
+    );
+    const result = await runProcess(cmd, args, { input: manyKilobytes(), timeoutMs: 10_000 });
+
+    expect(result.stdout.toString()).toBe(String(64 * 64 * 1024));
+  });
+
+  it("fails when the input stream breaks, instead of passing on what came before", async () => {
+    const [cmd, args] = node(`process.stdin.pipe(process.stdout)`);
+    const error = await runProcess(cmd, args, { input: broken(), timeoutMs: 5000 }).catch(
+      (e: unknown) => e,
+    );
+
+    expect(error).toMatchObject({ message: expect.stringContaining("disk went away") });
+    expect((error as NodeJS.ErrnoException).code).toBeUndefined(); // not mistaken for a missing binary
+  });
+
+  it("stops reading the input when the process exits early", async () => {
+    const [cmd, args] = node(`process.exit(0)`);
+    let produced = 0;
+    async function* endless() {
+      for (;;) {
+        produced++;
+        yield Buffer.alloc(64 * 1024);
+      }
+    }
+
+    const result = await runProcess(cmd, args, { input: endless(), timeoutMs: 5000 });
+
+    expect(result.code).toBe(0);
+    expect(produced).toBeLessThan(1000);
   });
 
   it("passes arguments without a shell", async () => {

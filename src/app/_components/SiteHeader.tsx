@@ -11,6 +11,11 @@ export function SiteHeader() {
         <Link href="/" className={styles.brand}>
           book-to-audio
         </Link>
+        <nav aria-label="Main">
+          <Link href="/settings" className={styles.link}>
+            Settings
+          </Link>
+        </nav>
       </div>
     </header>
   );

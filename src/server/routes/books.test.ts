@@ -1,9 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { FastifyInstance } from "fastify";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildServer } from "../app.js";
 import { ChapterQueue } from "../books/queue.js";
+import type { AppEvent } from "../events/bus.js";
 import { EpubError } from "../epub/errors.js";
 import { zipEpub } from "../epub/testing/build-epub.js";
 import { ParserBusyError } from "../epub/worker-parser.js";
@@ -41,11 +42,31 @@ describe("book routes", () => {
       engine: ctx.engine,
       maxUploadBytes,
       parseEpub,
-      onQueued: () => queued++,
+      bus: ctx.bus,
+      pool: ctx.pool,
+      settings: ctx.settings,
     });
 
   const upload = (filename: string, data: Buffer | string) =>
     app.inject({ method: "POST", url: "/api/books", ...multipartBody([{ filename, data }]) });
+
+  it("tells listeners about a new book", async () => {
+    const seen: AppEvent[] = [];
+    ctx.bus.subscribe((event) => seen.push(event));
+
+    const res = await upload("lighthouse.epub", await lighthouseBook());
+
+    expect(seen).toEqual([{ type: "book-added", bookId: res.json<BookJson>().id }]);
+  });
+
+  it("tells nobody about an upload that failed", async () => {
+    const seen: AppEvent[] = [];
+    ctx.bus.subscribe((event) => seen.push(event));
+
+    await upload("broken.epub", "not a zip");
+
+    expect(seen).toEqual([]);
+  });
 
   const uploadLighthouse = async () => {
     const res = await upload("lighthouse.epub", await lighthouseBook());
@@ -55,8 +76,11 @@ describe("book routes", () => {
 
   beforeEach(() => {
     ctx = createTestContext();
-    app = buildApp();
     queued = 0;
+    vi.spyOn(ctx.pool, "notify").mockImplementation(() => {
+      queued++;
+    });
+    app = buildApp();
   });
 
   afterEach(async () => {
@@ -369,7 +393,7 @@ describe("book routes", () => {
   });
 
   describe("POST /api/books/:id/convert", () => {
-    it("queues every chapter and wakes the scheduler", async () => {
+    it("queues every chapter and wakes the workers", async () => {
       const book = await uploadLighthouse();
 
       const res = await app.inject({ method: "POST", url: `/api/books/${book.id}/convert` });
@@ -379,6 +403,34 @@ describe("book routes", () => {
       expect(res.json<BookJson>().chapters.map((c) => c.status)).toEqual(Array(4).fill("queued"));
       expect(queued).toBe(1);
       expect(new ChapterQueue(ctx.db).claimNext()).toMatchObject({ bookId: book.id, position: 1 });
+    });
+
+    it("makes the book's audio folder, which the workers never create", async () => {
+      const book = await uploadLighthouse();
+      expect(fs.existsSync(ctx.storage.audioDir(book.id))).toBe(false);
+
+      await app.inject({ method: "POST", url: `/api/books/${book.id}/convert` });
+
+      expect(fs.existsSync(ctx.storage.audioDir(book.id))).toBe(true);
+    });
+
+    it("tells listeners that the book started converting", async () => {
+      const book = await uploadLighthouse();
+      const seen: AppEvent[] = [];
+      ctx.bus.subscribe((event) => seen.push(event));
+
+      await app.inject({ method: "POST", url: `/api/books/${book.id}/convert` });
+
+      expect(seen).toEqual([
+        {
+          type: "book",
+          bookId: book.id,
+          status: "converting",
+          doneCount: 0,
+          failedCount: 0,
+          durationSeconds: 0,
+        },
+      ]);
     });
 
     it("answers 409 when the book is not ready", async () => {
@@ -421,7 +473,7 @@ describe("book routes", () => {
       ctx.storage.ensureAudioDir(book.id);
       const rel = ctx.storage.audioRelPath(book.id, task.position);
       fs.writeFileSync(ctx.storage.resolve(rel), AUDIO);
-      queue.markDone(task.id, rel, 12.5);
+      queue.markDone(task, rel, 12.5);
       return book;
     };
 
