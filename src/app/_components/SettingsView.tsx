@@ -14,6 +14,7 @@ import { ALL_LANGUAGES, languageSettingsMessage } from "../_lib/language-picker"
 import { usePool } from "../_lib/pool-store";
 import { usePoll } from "../_lib/use-poll";
 import { LoadState } from "./LoadState";
+import { SpeedSection } from "./SpeedSection";
 import styles from "./SettingsView.module.css";
 import shared from "./shared.module.css";
 
@@ -127,6 +128,8 @@ export function SettingsView() {
           </p>
         )}
       </section>
+
+      <SpeedSection workers={settings.workers} />
 
       <section className={styles.section} aria-labelledby="languages-title">
         <h2 id="languages-title" className={styles.sectionTitle}>

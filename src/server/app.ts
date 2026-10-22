@@ -23,11 +23,21 @@ import { registerBookRoutes } from "./routes/books.js";
 import { registerConfigRoute } from "./routes/config.js";
 import { registerDownloadRoutes } from "./routes/downloads.js";
 import { registerErrorHandler } from "./routes/errors.js";
+import { registerBenchmarkRoutes } from "./routes/benchmark.js";
+import { registerEstimateRoute } from "./routes/estimate.js";
 import { registerEventsRoute, type EventStreamLimits } from "./routes/events.js";
 import { registerPoolRoutes } from "./routes/pool.js";
 import { registerSettingsRoutes } from "./routes/settings.js";
 import { registerUpload } from "./routes/upload.js";
 import type { SettingsStore } from "./settings/settings.js";
+import { BenchmarkRepository, type MachineInfo } from "./benchmark/repository.js";
+import type { BenchmarkRunner } from "./benchmark/runner.js";
+import { CountRepository } from "./books/count-repository.js";
+import { PreparedCounter } from "./books/prepared-counter.js";
+import { prepareInThread, type TextPreparer } from "./convert/chapter-text.js";
+import { SpeedCalibration } from "./speed/calibration.js";
+import { Estimator } from "./speed/estimator.js";
+import { LearningRepository } from "./speed/learning.js";
 import { API_SECURITY_HEADERS, registerHostAndOriginGuard } from "./security.js";
 import type { TtsEngine } from "./tts/engine.js";
 
@@ -52,6 +62,12 @@ export interface ServerDeps {
   eventStream?: EventStreamLimits;
   /** Host names besides localhost that the app answers to. */
   allowedHosts?: readonly string[];
+  /** The speed benchmark, with the machine it measures; without it the benchmark routes are not served. */
+  benchmark?: { runner: BenchmarkRunner; machine: () => MachineInfo };
+  /** The text rules, for the estimates. Production passes the worker thread one. */
+  prepareText?: TextPreparer;
+  /** Counts the prepared text of new books in the background. Made here when not given. */
+  counter?: PreparedCounter;
   /** Parses a stored upload. Defaults to a worker thread with a memory cap; replaced in tests. */
   parseEpub?: (filePath: string) => Promise<ParsedEpub>;
 }
@@ -81,6 +97,14 @@ export function buildServer({
   settings,
   eventStream = {},
   allowedHosts = [],
+  benchmark,
+  prepareText = prepareInThread,
+  counter = new PreparedCounter({
+    repo: new CountRepository(db),
+    prepare: prepareText,
+    maxChars: engine.maxInputChars,
+    bus,
+  }),
   parseEpub = createWorkerParser(),
 }: ServerDeps): FastifyInstance {
   const app = Fastify({
@@ -105,6 +129,15 @@ export function buildServer({
     logger: app.log,
   });
 
+  const estimator = new Estimator({
+    engine,
+    calibration: new SpeedCalibration(new BenchmarkRepository(db), new LearningRepository(db)),
+    workers: () => settings.workers(),
+    poolPaused: () => pool.status().state === "paused",
+    speedTestSeconds: () =>
+      benchmark && pool.status().held ? benchmark.runner.expectedRemainingSeconds() : null,
+  });
+
   registerHostAndOriginGuard(app, allowedHosts);
 
   app.register(
@@ -123,12 +156,28 @@ export function buildServer({
       await api.register(multipart, {
         limits: { fileSize: maxUploadBytes, files: 1, fields: 5, parts: 6 },
       });
-      registerUpload(api, { repo, storage, engine, bus, parseEpub });
-      registerBookRoutes(api, { repo, storage, engine, bus, pool });
-      registerBookControlRoutes(api, { repo, engine, controls });
-      registerDownloadRoutes(api, { repo, storage, engine, outputs });
+      registerUpload(api, { repo, storage, engine, bus, parseEpub, estimator, counter });
+      registerBookRoutes(api, { repo, storage, engine, bus, pool, estimator, counter });
+      registerEstimateRoute(api, {
+        repo,
+        counts: new CountRepository(db),
+        engine,
+        estimator,
+        prepareText: counter.prepare,
+      });
+      registerBookControlRoutes(api, { repo, engine, controls, estimator });
+      registerDownloadRoutes(api, { repo, storage, engine, outputs, estimator });
       registerPoolRoutes(api, pool);
       registerSettingsRoutes(api, { settings, pool });
+      if (benchmark) {
+        registerBenchmarkRoutes(api, {
+          runner: benchmark.runner,
+          repo: new BenchmarkRepository(db),
+          engine,
+          settings,
+          machine: benchmark.machine,
+        });
+      }
       registerEventsRoute(api, { bus, pool, ...eventStream });
 
       api.get("/health", async (req, reply) => {

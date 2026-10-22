@@ -101,6 +101,19 @@ export class ChapterQueue {
       .immediate();
   }
 
+  /** Whether a worker could take a chapter right now. */
+  hasClaimable(): boolean {
+    return (
+      this.db
+        .prepare(
+          `SELECT 1 FROM chapters c JOIN books b ON b.id = c.book_id
+           WHERE c.status = 'queued' AND b.status = 'converting' LIMIT 1`,
+        )
+        .pluck()
+        .get() === 1
+    );
+  }
+
   /** Saves how many of `total` chunks are finished. Progress is the same fraction. */
   recordChunks(task: ClaimedChapter, done: number, total: number): boolean {
     const progress = total > 0 ? Math.min(1, done / total) : 0;

@@ -1,4 +1,5 @@
 import type { BookStatus, ChapterStatus } from "../books/repository.js";
+import type { BenchmarkStatus } from "../benchmark/status.js";
 import type { OutputsView } from "../outputs/view.js";
 
 /** Small JSON payloads for the live updates in `GET /api/events`. */
@@ -36,6 +37,8 @@ export interface PoolEvent {
   cause: "failures" | "disk" | null;
   workers: number;
   activeWorkers: number;
+  /** The speed benchmark has the pool: no new chapter starts until it is done. */
+  held: boolean;
 }
 
 export interface BookAddedEvent {
@@ -55,13 +58,26 @@ export interface OutputsEvent extends OutputsView {
   bookId: string;
 }
 
+/** The speed benchmark started, moved on or ended. */
+export interface BenchmarkEvent extends BenchmarkStatus {
+  type: "benchmark";
+}
+
+/** The prepared text of a book was counted, so its length and conversion time can be told now. */
+export interface BookCountedEvent {
+  type: "book-counted";
+  bookId: string;
+}
+
 export type AppEvent =
   | ChapterEvent
   | BookEvent
   | PoolEvent
   | BookAddedEvent
   | BookDeletedEvent
-  | OutputsEvent;
+  | OutputsEvent
+  | BenchmarkEvent
+  | BookCountedEvent;
 /** `seq` grows with every event, so a client can tell which of two states is newer. */
 export type Listener = (event: AppEvent, seq: number) => void;
 

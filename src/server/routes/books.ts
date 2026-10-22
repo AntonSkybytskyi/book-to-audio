@@ -2,10 +2,12 @@ import type { FastifyInstance, FastifyReply } from "fastify";
 import { LANGUAGES, type Language } from "../books/languages.js";
 import type { BookRepository } from "../books/repository.js";
 import type { Storage } from "../books/storage.js";
-import { loadBookView, toSummaryView } from "../books/views.js";
+import type { PreparedCounter } from "../books/prepared-counter.js";
+import { loadBookView, loadSummaries } from "../books/views.js";
 import type { EventBus } from "../events/bus.js";
 import { sendFile } from "../http/send-file.js";
 import type { PoolControl } from "../convert/pool.js";
+import type { Estimator } from "../speed/estimator.js";
 import { pickVoice, type TtsEngine } from "../tts/engine.js";
 import { sendError } from "./errors.js";
 
@@ -16,6 +18,9 @@ export interface BookRouteDeps {
   bus: EventBus;
   /** Wakes idle workers after a book is queued. */
   pool: Pick<PoolControl, "notify">;
+  estimator: Estimator;
+  /** Counts the prepared characters again, in the background, when the language changes. */
+  counter: Pick<PreparedCounter, "enqueue">;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -23,9 +28,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const LANGUAGE_NAMES: Record<Language, string> = { en: "English", uk: "Ukrainian", ru: "Russian" };
 
 export function registerBookRoutes(api: FastifyInstance, deps: BookRouteDeps) {
-  const { repo, storage, engine, bus, pool } = deps;
+  const { repo, storage, engine, bus, pool, estimator, counter } = deps;
 
-  const bookView = (id: string) => loadBookView(repo, engine, id);
+  const bookView = (id: string) => loadBookView(repo, engine, estimator, id);
 
   /** Validates `:id` and loads the book, replying 400 or 404 itself when it cannot. */
   const withBook = (id: string, reply: FastifyReply) => {
@@ -38,7 +43,7 @@ export function registerBookRoutes(api: FastifyInstance, deps: BookRouteDeps) {
     return book ?? null;
   };
 
-  api.get("/books", async () => ({ books: repo.list().map(toSummaryView) }));
+  api.get("/books", async () => ({ books: loadSummaries(repo, estimator) }));
 
   api.get<{ Params: { id: string } }>("/books/:id", async (req, reply) => {
     const book = withBook(req.params.id, reply);
@@ -68,6 +73,10 @@ export function registerBookRoutes(api: FastifyInstance, deps: BookRouteDeps) {
           "The language can only be changed before converting.",
         );
       }
+      // The text rules differ by language (Ukrainian spells out every number), so the length of the
+      // text the engine is given does too: `setLanguage` forgot the counts, and they are made again
+      // in the background (the estimates say "measuring" until they land).
+      if (req.body.language !== book.language) counter.enqueue(book.id);
       return bookView(book.id);
     },
   );

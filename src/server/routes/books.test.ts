@@ -57,7 +57,10 @@ describe("book routes", () => {
 
     const res = await upload("lighthouse.epub", await lighthouseBook());
 
-    expect(seen).toEqual([{ type: "book-added", bookId: res.json<BookJson>().id }]);
+    const bookId = res.json<BookJson>().id;
+    expect(seen[0]).toEqual({ type: "book-added", bookId });
+    // The text is counted after the answer; that is told as well (and not before the book was announced).
+    await vi.waitFor(() => expect(seen).toContainEqual({ type: "book-counted", bookId }));
   });
 
   it("tells nobody about an upload that failed", async () => {
@@ -107,7 +110,8 @@ describe("book routes", () => {
         position: 1,
         title: "The Last Boat",
         status: "pending",
-        estimatedMinutes: 1,
+        preparedChars: expect.any(Number),
+        estimatedSeconds: null, // not counted yet: the upload does not wait for it
       });
       expect(JSON.stringify(book)).not.toContain("supply boat");
       expect(JSON.stringify(book)).not.toContain(ctx.dataDir);

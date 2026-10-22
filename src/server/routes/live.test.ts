@@ -144,6 +144,7 @@ describe("live updates and pool routes", () => {
         cause: null,
         workers: 2,
         activeWorkers: 0,
+        held: false,
       });
       stream.destroy();
     });
@@ -430,6 +431,7 @@ describe("live updates and pool routes", () => {
         cause: null,
         workers: 2,
         activeWorkers: 0,
+        held: false,
       });
     });
 

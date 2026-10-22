@@ -12,6 +12,20 @@ export function PoolBanner() {
   const [resuming, setResuming] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
 
+  if (pool?.held && pool.state !== "paused") {
+    return (
+      <section className={`${styles.banner} ${styles.notice}`} role="status">
+        <div className={styles.inner}>
+          <p className={styles.text}>
+            <strong>Measuring how fast this computer reads aloud.</strong>{" "}
+            {pool.activeWorkers > 0
+              ? "Chapters that are already being read finish first; conversion carries on as soon as the speed test is done, which takes a few minutes at most."
+              : "No chapter is being read now. Conversion carries on as soon as the speed test is done, which takes a few minutes at most."}
+          </p>
+        </div>
+      </section>
+    );
+  }
   if (!pool || pool.state !== "paused") return null;
 
   const resume = async () => {

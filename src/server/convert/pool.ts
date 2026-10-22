@@ -3,7 +3,10 @@ import { DiskFullError, GENERIC_CHAPTER_ERROR, UserFacingError } from "../errors
 import { ProgressPublisher } from "../events/throttle.js";
 import { TtsError } from "../tts/engine.js";
 import type { ConvertedChapter } from "./convert-chapter.js";
+import { ConcurrencyMeter } from "./concurrency.js";
 import { chapterEvent, type Counts } from "./pool-events.js";
+import { failBestEffort, publishFailure, recordTiming } from "./pool-outcome.js";
+import { PoolGate, type Release } from "./pool-gate.js";
 import type { PoolControl, PoolDeps, PoolStatus } from "./pool-types.js";
 import { sleep } from "./retry.js";
 import { SessionHolder } from "./sessions.js";
@@ -40,10 +43,21 @@ export class WorkerPool implements PoolControl {
   private running = false;
   private paused = false;
   private shutdown = new AbortController();
+  private readonly meter: ConcurrencyMeter;
+  private readonly now: () => number;
+  /** Counts the times the pool was held, released or resumed: a chapter that saw one is no measure of speed. */
+  private disturbances = 0;
+  private readonly gate = new PoolGate(() => {
+    this.disturbances++;
+    this.wake();
+    this.publishPool();
+  });
 
   constructor(private readonly deps: PoolDeps) {
     this.target = deps.settings.workers();
     this.events = new ProgressPublisher(deps.bus, deps.progressIntervalMs);
+    this.now = deps.now ?? (() => performance.now());
+    this.meter = new ConcurrencyMeter(this.now);
   }
 
   /** Re-queues interrupted chapters (their chunks are kept) and starts the workers. */
@@ -83,12 +97,38 @@ export class WorkerPool implements PoolControl {
   status(): PoolStatus {
     const { state, error, cause } = this.deps.state.get();
     const activeWorkers = [...this.workers.values()].filter((worker) => worker.current).length;
-    return { state, error, cause, workers: this.target, activeWorkers };
+    return { state, error, cause, workers: this.target, activeWorkers, held: this.gate.held };
+  }
+
+  hold(signal?: AbortSignal): Promise<Release> {
+    return this.gate.hold(() => this.inFlight(), signal);
+  }
+
+  holdWhenIdle(signal?: AbortSignal): Promise<Release> {
+    return this.gate.holdWhenIdle(() => this.idle(), signal);
+  }
+
+  private inFlight(): Promise<void>[] {
+    return [...this.workers.values()].flatMap((worker) =>
+      worker.processing ? [worker.processing] : [],
+    );
+  }
+
+  /** Looks again for an idle moment, for a waiter that was held up by something outside the pool. */
+  recheckIdle(): void {
+    this.gate.offerIdle(() => this.idle());
+  }
+
+  /** No chapter is being read and none could be taken (a stopped pool has no workers at all). */
+  private idle(): boolean {
+    if (this.inFlight().length > 0 || this.deps.busyElsewhere?.()) return false;
+    return !this.running || this.paused || !this.deps.queue.hasClaimable();
   }
 
   resume(): PoolStatus {
     if (this.deps.state.resume()) {
       this.paused = false;
+      this.disturbances++;
       this.deps.logger?.info("the pool was resumed");
       this.wake();
     }
@@ -168,14 +208,18 @@ export class WorkerPool implements PoolControl {
     const { queue, logger, backoffMs = 1000 } = this.deps;
     while (this.running && !worker.retiring) {
       try {
-        const task = this.paused ? null : queue.claimNext();
+        const task = this.paused || this.gate.held ? null : queue.claimNext();
         if (task) {
           worker.processing = this.process(worker, task);
-          await worker.processing;
-          worker.processing = null;
+          try {
+            await worker.processing;
+          } finally {
+            worker.processing = null;
+          }
           continue;
         }
         // Nothing can be queued between claimNext and here: both run in one tick.
+        this.gate.offerIdle(() => this.idle());
         await new Promise<void>((resolve) => this.wakers.add(resolve));
       } catch (error) {
         // A database failure must not end the worker; wait a moment so it cannot spin.
@@ -185,6 +229,9 @@ export class WorkerPool implements PoolControl {
     }
     // Leave the map in the same tick as the check above, so a count that rises again spawns a new one.
     if (this.workers.get(worker.index) === worker) this.workers.delete(worker.index);
+    // The last chapter may have ended on this worker: nobody else is left to notice the pool is idle.
+    this.gate.offerIdle(() => this.idle());
+    this.wake();
     const closing = worker.sessions.close().catch((error: unknown) => {
       logger?.error({ err: error }, "could not stop an engine process");
     });
@@ -199,6 +246,9 @@ export class WorkerPool implements PoolControl {
     const controller = new AbortController();
     const afterSettle: (() => void)[] = [];
     worker.current = { task, controller, afterSettle };
+    const startedAt = this.now();
+    const calm = this.disturbances;
+    const crowd = this.meter.enter();
     const counts = { done: task.chunksDone, total: task.chunkCount };
     this.events.publish(chapterEvent(task, "generating", counts));
     this.publishPool();
@@ -229,15 +279,22 @@ export class WorkerPool implements PoolControl {
       failure = error;
     }
     worker.current = null;
+    const wallSeconds = (this.now() - startedAt) / 1000;
+    const concurrency = this.meter.averageSince(crowd);
+    this.meter.leave();
 
     try {
-      this.settle(task, controller.signal, converted, failure, counts);
+      this.settle(task, controller.signal, converted, failure, counts, {
+        wallSeconds,
+        concurrency,
+        disturbed: this.disturbances !== calm,
+      });
     } catch (error) {
       logger?.error(
         { err: error, bookId: task.bookId, chapter: task.position },
         "could not save the result of a chapter",
       );
-      this.failBestEffort(task, counts);
+      failBestEffort(this.deps, this.events, task, counts);
     }
     this.events.forget(task.bookId, task.position);
     for (const hook of afterSettle) {
@@ -264,6 +321,7 @@ export class WorkerPool implements PoolControl {
     converted: ConvertedChapter | null,
     failure: unknown,
     counts: Counts,
+    timing: { wallSeconds: number; concurrency: number; disturbed: boolean },
   ): void {
     const { queue, converter, state, logger } = this.deps;
     const where = { bookId: task.bookId, chapter: task.position };
@@ -272,6 +330,7 @@ export class WorkerPool implements PoolControl {
       if (queue.markDone(task, converted.audioPath, converted.durationSeconds)) {
         converter.discardChunks(task);
         state.recordSuccess();
+        recordTiming(this.deps, task, converted, timing);
         this.events.publish({
           ...chapterEvent(task, "done", counts),
           progress: 1,
@@ -311,7 +370,7 @@ export class WorkerPool implements PoolControl {
     const message = failure instanceof UserFacingError ? failure.message : GENERIC_CHAPTER_ERROR;
     // The finished chunks stay, so running the chapter again can continue from them.
     if (!queue.markFailed(task, message)) return;
-    this.publishFailure(task, counts, message);
+    publishFailure(this.deps, this.events, task, counts, message);
     // Text that cannot be read says nothing about the engine, so it does not count towards
     // pausing the pool. Everything else (a crash, a timeout, a missing binary) does.
     if (failure instanceof TtsError && failure.code === "bad_input") return;
@@ -325,43 +384,6 @@ export class WorkerPool implements PoolControl {
     if (!this.deps.queue.requeue(task)) return;
     this.events.publish(chapterEvent(task, "queued", counts));
     this.wake(); // Another worker may be idle.
-  }
-
-  /**
-   * A chapter that has audio was being regenerated: it is `done` again with that audio and
-   * keeps the message as a note, and its chunks are no longer needed. Any other becomes `failed`.
-   */
-  private publishFailure(task: ClaimedChapter, counts: Counts, error: string): void {
-    if (!this.deps.queue.hasAudio(task.id)) {
-      this.events.publish({ ...chapterEvent(task, "failed", counts), error });
-      return;
-    }
-    this.events.publish({
-      ...chapterEvent(task, "done", { done: 0, total: 0 }),
-      progress: 1,
-      regenError: error,
-    });
-    // After the event and the failure count: leftover chunks are only waste, and a failure
-    // to remove them must not hide what happened. The startup sweep removes them.
-    try {
-      this.deps.converter.discardChunks(task);
-    } catch (cause) {
-      this.deps.logger?.warn(
-        { err: cause, bookId: task.bookId, chapter: task.position },
-        "could not remove the chunks of a failed regeneration",
-      );
-    }
-  }
-
-  /** Last resort when saving a result failed, so the chapter is not left `generating`. */
-  private failBestEffort(task: ClaimedChapter, counts: Counts): void {
-    const message = "The result of this chapter could not be saved.";
-    try {
-      if (this.deps.queue.markFailed(task, message)) this.publishFailure(task, counts, message);
-    } catch (error) {
-      // The next start re-queues anything still generating.
-      this.deps.logger?.error({ err: error, bookId: task.bookId }, "chapter left generating");
-    }
   }
 
   private publishPool(): void {

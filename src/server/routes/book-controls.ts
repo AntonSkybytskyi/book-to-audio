@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply } from "fastify";
 import { ControlError, type BookControls } from "../books/controls.js";
 import type { BookRepository } from "../books/repository.js";
 import { loadBookView } from "../books/views.js";
+import type { Estimator } from "../speed/estimator.js";
 import type { TtsEngine } from "../tts/engine.js";
 import { sendError } from "./errors.js";
 
@@ -9,6 +10,7 @@ export interface BookControlRouteDeps {
   repo: BookRepository;
   engine: TtsEngine;
   controls: BookControls;
+  estimator: Estimator;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -37,9 +39,9 @@ const run = async (
  * and `DELETE /books/:id`. The first four answer with the book as it is afterwards.
  */
 export function registerBookControlRoutes(api: FastifyInstance, deps: BookControlRouteDeps) {
-  const { repo, engine, controls } = deps;
+  const { repo, engine, controls, estimator } = deps;
 
-  const view = (id: string) => () => loadBookView(repo, engine, id);
+  const view = (id: string) => () => loadBookView(repo, engine, estimator, id);
 
   api.post<{ Params: { id: string } }>("/books/:id/pause", (req, reply) =>
     run(reply, req.params.id, () => controls.pause(req.params.id), view(req.params.id)),

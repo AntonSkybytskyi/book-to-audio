@@ -41,6 +41,12 @@ export interface ConvertedChapter {
   /** Relative to the data directory. */
   audioPath: string;
   durationSeconds: number;
+  /** What the speed estimates learn from. Set by the real converter. */
+  voiceId?: string;
+  /** Characters of prepared text the chapter was read from. */
+  preparedChars?: number;
+  /** Chunk attempts that failed and were tried again; such a chapter's time says little about speed. */
+  retries?: number;
 }
 
 export interface ChapterRun {
@@ -94,6 +100,7 @@ export function createChapterConverter({
     text: string,
     index: number,
     total: number,
+    counts: { retries: number },
   ): Promise<PcmAudio> {
     const { task, sessions, signal } = run;
     for (let attempt = 1; ; attempt++) {
@@ -124,6 +131,7 @@ export function createChapterConverter({
           { err: error, detail: detailOf(error), ...where, attempt },
           `chunk failed, retrying in ${delay / 1000} s`,
         );
+        counts.retries++;
         await wait(delay, signal);
       }
     }
@@ -143,6 +151,7 @@ export function createChapterConverter({
         throw new TtsError("bad_input", "This chapter has no text to read aloud.");
       }
       const total = texts.length;
+      const counts = { retries: 0 };
 
       // Chunks are only reused if they were made by this engine, voice and speaker, from text
       // prepared by the same rules, for the same split.
@@ -162,7 +171,7 @@ export function createChapterConverter({
         const text = texts[index] ?? "";
         let samples: Buffer;
         if (hasWords(text)) {
-          const pcm = await synthesize(run, voice.id, text, index, total);
+          const pcm = await synthesize(run, voice.id, text, index, total, counts);
           if (pcm.sampleRate !== voice.sampleRate) {
             throw new TtsError(
               "synthesis_failed",
@@ -189,7 +198,13 @@ export function createChapterConverter({
         signal,
         store.totalSeconds(task.bookId, task.position, total),
       );
-      return { audioPath, durationSeconds };
+      return {
+        audioPath,
+        durationSeconds,
+        voiceId: voice.id,
+        preparedChars: texts.reduce((sum, text) => sum + text.length, 0),
+        retries: counts.retries,
+      };
     },
 
     discardChunks: (task) => store.remove(task.bookId, task.position),

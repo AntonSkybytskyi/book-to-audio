@@ -62,6 +62,14 @@ export function patchBook(book: Book, event: AppEvent): Book | null {
     return { ...book, outputs: outputsOf(event) };
   }
 
+  // The text was counted: the length and the time to convert arrive with a fresh load.
+  if (event.type === "book-counted" && event.bookId === book.id) return null;
+
+  // A book waiting in the queue counts the books ahead of it; when one of them moves on, ask again.
+  if (event.type === "book" && event.bookId !== book.id && book.timeLeft?.state === "waiting") {
+    return null;
+  }
+
   if (event.type === "book" && event.bookId === book.id) {
     // Converting a ready book changes every chapter (Convert, in another tab): load them again.
     // Any other change of status (pause, resume, done, regenerate) leaves the chapters to their own events.
@@ -93,9 +101,16 @@ export function patchLibrary(books: BookSummary[], event: AppEvent): BookSummary
       book.id === event.bookId ? { ...book, outputs: outputsOf(event) } : book,
     );
   }
+  if (event.type === "book-counted") {
+    return books.some((book) => book.id === event.bookId) ? null : books;
+  }
+  // A book's line says it waits for the speed test: ask again as the test moves on and when it ends.
+  if (event.type === "benchmark" || (event.type === "pool" && !event.held)) {
+    return books.some((book) => book.timeLeft?.state === "waiting_for_speed_test") ? null : books;
+  }
   if (event.type !== "book") return books;
   if (!books.some((book) => book.id === event.bookId)) return null;
-  return books.map((book) =>
+  const patched = books.map((book) =>
     book.id === event.bookId
       ? {
           ...book,
@@ -106,4 +121,8 @@ export function patchLibrary(books: BookSummary[], event: AppEvent): BookSummary
         }
       : book,
   );
+  // The time left of a converting book depends on the others and moves with every chapter: ask again.
+  return patched.some((book) => book.status === "converting" || book.status === "paused")
+    ? null
+    : patched;
 }

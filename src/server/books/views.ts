@@ -1,6 +1,12 @@
 import type { TtsEngine } from "../tts/engine.js";
 import { toOutputsView, type OutputsView } from "../outputs/view.js";
-import { estimateMinutes } from "./estimate.js";
+import { audioSecondsFor, type SpeedModel } from "../../shared/estimate.js";
+import type {
+  BookEstimates,
+  BookEstimateView,
+  Estimator,
+  TimeLeftView,
+} from "../speed/estimator.js";
 import type { BookRepository, BookWithTotals, Chapter } from "./repository.js";
 
 /** What the API returns. Never includes file paths or chapter text. */
@@ -12,7 +18,10 @@ export interface ChapterView {
   error: string | null;
   charCount: number;
   wordCount: number;
-  estimatedMinutes: number;
+  /** Characters the engine is given for the chapter; what the time estimates are made from. */
+  preparedChars: number;
+  /** How long the chapter will be read aloud, before it is done; null when no voice could say. */
+  estimatedSeconds: number | null;
   durationSeconds: number | null;
   /** Chunks the chapter is split into (0 until it starts) and how many are finished. */
   chunkCount: number;
@@ -42,19 +51,29 @@ export interface BookSummaryView {
   doneCount: number;
   failedCount: number;
   wordCount: number;
-  estimatedMinutes: number;
+  /** Length and conversion time for a book that is not finished; null once it is, without a voice, or while measuring. */
+  estimate: BookEstimateView | null;
+  /** The text is still being counted, so there is no estimate yet; it arrives by itself (`book-counted`). */
+  measuring: boolean;
+  /** Only while the book is converting or paused. */
+  timeLeft: TimeLeftView | null;
   durationSeconds: number;
   /** The M4B and ZIP: whether they can be downloaded, are being built or failed. */
   outputs: OutputsView;
 }
 
 export interface BookView extends BookSummaryView {
+  /** The speed behind `estimate`, so the page can keep the time left current as chapters progress. */
+  speed: SpeedModel | null;
   chapters: ChapterView[];
   /** Languages the TTS engine has a voice for. */
   availableLanguages: string[];
 }
 
-export const toSummaryView = (book: BookWithTotals): BookSummaryView => ({
+export const toSummaryView = (
+  book: BookWithTotals,
+  estimates?: Pick<BookEstimates, "estimate" | "measuring" | "timeLeft">,
+): BookSummaryView => ({
   id: book.id,
   title: book.title,
   author: book.author,
@@ -69,12 +88,14 @@ export const toSummaryView = (book: BookWithTotals): BookSummaryView => ({
   doneCount: book.doneCount,
   failedCount: book.failedCount,
   wordCount: book.wordCount,
-  estimatedMinutes: estimateMinutes(book.wordCount),
+  estimate: estimates?.measuring ? null : (estimates?.estimate ?? null),
+  measuring: estimates?.measuring ?? false,
+  timeLeft: estimates?.timeLeft ?? null,
   durationSeconds: book.durationSeconds,
   outputs: toOutputsView(book.status, book.audioGeneration, book.outputs),
 });
 
-export const toChapterView = (chapter: Chapter): ChapterView => ({
+export const toChapterView = (chapter: Chapter, speed: SpeedModel | null): ChapterView => ({
   position: chapter.position,
   title: chapter.title,
   status: chapter.status,
@@ -82,7 +103,8 @@ export const toChapterView = (chapter: Chapter): ChapterView => ({
   error: chapter.error,
   charCount: chapter.charCount,
   wordCount: chapter.wordCount,
-  estimatedMinutes: estimateMinutes(chapter.wordCount),
+  preparedChars: chapter.preparedChars,
+  estimatedSeconds: speed && chapter.counted ? audioSecondsFor(speed, chapter.preparedChars) : null,
   durationSeconds: chapter.durationSeconds,
   chunkCount: chapter.chunkCount,
   chunksDone: chapter.chunksDone,
@@ -91,13 +113,26 @@ export const toChapterView = (chapter: Chapter): ChapterView => ({
   regenError: chapter.regenError,
 });
 
+/** The summaries of the library, with the estimates of the books that are not finished. */
+export function loadSummaries(repo: BookRepository, estimator: Estimator): BookSummaryView[] {
+  const estimates = estimator.forBooks(repo.workload());
+  return repo.list().map((book) => toSummaryView(book, estimates.get(book.id)));
+}
+
 /** A book with its chapters, or null when it does not exist. */
-export function loadBookView(repo: BookRepository, engine: TtsEngine, id: string): BookView | null {
+export function loadBookView(
+  repo: BookRepository,
+  engine: TtsEngine,
+  estimator: Estimator,
+  id: string,
+): BookView | null {
   const book = repo.get(id);
   if (!book) return null;
+  const estimates = estimator.forBooks(repo.workload()).get(id);
   return {
-    ...toSummaryView(book),
-    chapters: repo.chapters(id).map(toChapterView),
+    ...toSummaryView(book, estimates),
+    speed: estimates?.speed ?? null,
+    chapters: repo.chapters(id).map((chapter) => toChapterView(chapter, estimates?.speed ?? null)),
     availableLanguages: [...new Set(engine.voices().map((v) => v.language))],
   };
 }

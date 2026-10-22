@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
 import { audioUrl, regenerateChapter } from "../_lib/api";
 import { bookSummary, overallProgress } from "../_lib/book-status";
+import { speedTestSecondsLeft } from "../_lib/benchmark";
+import { bookTimeLeft } from "../_lib/time-left";
+import { useBenchmark } from "../_lib/use-benchmark";
 import { usePool } from "../_lib/pool-store";
 import { useBook } from "../_lib/use-book";
 import { BookControls } from "./BookControls";
@@ -23,6 +26,7 @@ export function BookView({ id }: { id: string }) {
   const router = useRouter();
   const { data: book, error, stale, deleted, refresh } = useBook(id);
   const pool = usePool();
+  const { data: speedTest } = useBenchmark();
   const audio = useRef<HTMLAudioElement>(null);
   /** The chapter and audio version that the shared <audio> element has loaded. */
   const loaded = useRef<{ position: number; version: number } | null>(null);
@@ -43,6 +47,8 @@ export function BookView({ id }: { id: string }) {
 
   if (deleted) return <BookDeleted />;
   if (!book) return <LoadState error={error} />;
+
+  const timeLeft = bookTimeLeft(book, pool, speedTestSecondsLeft(speedTest));
 
   const onPlayFailed = (reason: unknown) => {
     // Starting a new chapter interrupts the previous load; that is not an error.
@@ -93,6 +99,7 @@ export function BookView({ id }: { id: string }) {
         <p className={styles.summary} role="status" aria-live="polite">
           {bookSummary(book, pool?.state === "paused")}
         </p>
+        {timeLeft && <p className={styles.timeLeft}>{timeLeft}</p>}
         {book.status === "ready" && (
           <Link href={`/books/${book.id}/preview`} className={`${shared.button} ${styles.cta}`}>
             Review and convert

@@ -63,6 +63,8 @@ Requests whose `Host` header is not a local name get 403 (this stops DNS rebindi
 
 The Docker image ships one voice per language: `en_US-lessac-medium`, `uk_UA-ukrainian_tts-medium` (speaker `lada`) and `ru_RU-ruslan-medium` ([why](docs/decisions/voices.md)). The language of a book is detected from its text when it is uploaded and can be changed on the preview page; the Settings page chooses which languages that list offers (English and Ukrainian by default, Russian hidden). Before a chapter is read, numbers, years, Roman numerals and common abbreviations are written out where the engine would get them wrong ([what and why](docs/decisions/text-processing.md)).
 
+How long things take: the app measures how fast the speech engine is on your machine with a short benchmark (the speech rate, the real-time factor and the throughput with several workers at once, for each voice) and uses it for the length and conversion time on the preview and for the time left on the book page and in the library. It runs once on its own the first time the app starts, while nothing is being read, and again when the machine or the text rules change; the Settings page shows the numbers and has a Run benchmark button (`GET`/`POST`/`DELETE /api/benchmark`). While it runs no new chapter starts. After each finished chapter the estimates move a little towards what really happened. `pnpm build`, then `pnpm benchmark` (in the container: `docker compose exec app node dist/server/benchmark/cli.js`) prints the same measurements as a table without touching the app's data; it refuses to run while the app is converting unless you pass `--force`. How it works, what the numbers mean and the proposed speed target are in [docs/decisions/benchmark.md](docs/decisions/benchmark.md).
+
 Sample books for trying the app are in `fixtures/` (regenerate them with `pnpm tsx scripts/make-fixtures.ts`).
 
 Checks:
@@ -84,6 +86,8 @@ The same checks run in the container with `docker compose run --rm check`.
   - `tts/`: engine interface, Piper and fake engines, text chunking.
   - `audio/`: ffmpeg wrapper. `outputs/`: the M4B and ZIP builder (ffmpeg commands, ffmetadata escaping, file names, ZIP writer, build queue). `convert/`: chapter conversion, chunk store and the worker pool.
   - `events/`: in-process event bus behind `GET /api/events`. `settings/`: owner settings.
+  - `benchmark/`: the speed benchmark (samples, measurement through engine sessions, runner, CLI). `speed/`: the speed model of each voice (benchmark, rough defaults, learning from real chapters) and the estimator behind the times in the pages.
   - `books/`: storage paths, repository and chapter queue. `routes/`: HTTP API under `/api`.
+- `src/shared`: the estimate functions used by both the server and the pages.
 - `src/app`: Next.js App Router pages (library, preview, book page, settings).
 - `fixtures/`: small generated EPUBs. `scripts/`: fixture generator.

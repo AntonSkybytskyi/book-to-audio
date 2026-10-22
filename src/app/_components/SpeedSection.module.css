@@ -1,0 +1,116 @@
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.table th,
+.table td {
+  padding: 0.6rem 0.5rem;
+  text-align: left;
+  vertical-align: top;
+  border-top: 1px solid var(--rule);
+}
+
+.table thead th {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink-muted);
+  border-top: 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.voice {
+  font-weight: normal;
+}
+
+.language {
+  display: block;
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+}
+
+.voiceId {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--ink-muted);
+  overflow-wrap: anywhere;
+}
+
+.sub {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--ink-muted);
+}
+
+.none {
+  color: var(--ink-muted);
+  font-style: italic;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+/* On a narrow screen each voice becomes a small card, so nothing needs sideways scrolling. */
+@media (max-width: 36rem) {
+  .table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .table,
+  .table tbody,
+  .table tr,
+  .table th,
+  .table td {
+    display: block;
+  }
+
+  .table tr {
+    padding: 0.5rem 0;
+    border-top: 1px solid var(--rule);
+  }
+
+  .table th,
+  .table td {
+    border: 0;
+    padding: 0.15rem 0;
+  }
+
+  .table td[data-label] {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .table td[data-label]::before {
+    content: attr(data-label);
+    color: var(--ink-muted);
+  }
+
+  .table td[data-label] > span {
+    text-align: right;
+  }
+
+  .table td[data-label] .sub {
+    display: inline;
+    margin-left: 0.5rem;
+  }
+}
+
+/* Buttons that look off but keep the keyboard focus. */
+.actions button[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.actions button[aria-disabled="true"]:hover {
+  background: var(--accent);
+  color: var(--accent-ink);
+}

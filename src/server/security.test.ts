@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import Fastify from "fastify";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { hostname, registerHostAndOriginGuard } from "./security.js";
+import { hostname, registerHostAndOriginGuard, sameOriginOnly } from "./security.js";
 
 describe("hostname", () => {
   it.each([
@@ -85,5 +85,50 @@ describe("registerHostAndOriginGuard", () => {
     const res = await request("GET", { host: "localhost:3000", origin: "http://evil.example" });
 
     expect(res.statusCode).toBe(200);
+  });
+
+  describe("sameOriginOnly on a route", () => {
+    let guarded: FastifyInstance;
+
+    beforeEach(async () => {
+      guarded = Fastify();
+      registerHostAndOriginGuard(guarded, []);
+      guarded.get("/api/books/:id/estimate", { onRequest: sameOriginOnly }, async () => ({
+        ok: true,
+      }));
+      guarded.get("/api/books/:id", async () => ({ ok: true }));
+      await guarded.ready();
+    });
+
+    afterEach(() => guarded.close());
+
+    const get = (url: string, headers: Record<string, string> = {}) =>
+      guarded.inject({ method: "GET", url, headers: { host: "localhost:3000", ...headers } });
+
+    it("refuses another site, however the path is written", async () => {
+      for (const url of [
+        "/api/books/abc/estimate?language=uk",
+        "/api/books/abc/%65stimate?language=uk",
+      ]) {
+        expect((await get(url, { "sec-fetch-site": "cross-site" })).statusCode).toBe(403);
+        expect((await get(url, { origin: "https://evil.example" })).statusCode).toBe(403);
+      }
+    });
+
+    it("lets the app itself and curl in", async () => {
+      expect(
+        (await get("/api/books/abc/estimate", { "sec-fetch-site": "same-origin" })).statusCode,
+      ).toBe(200);
+      expect((await get("/api/books/abc/%65stimate")).statusCode).toBe(200);
+      expect(
+        (await get("/api/books/abc/estimate", { origin: "http://localhost:3000" })).statusCode,
+      ).toBe(200);
+    });
+
+    it("leaves other reads alone, whoever asks", async () => {
+      expect((await get("/api/books/abc", { "sec-fetch-site": "cross-site" })).statusCode).toBe(
+        200,
+      );
+    });
   });
 });

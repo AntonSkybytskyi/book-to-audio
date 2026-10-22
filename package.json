@@ -8,6 +8,7 @@
     "dev": "NODE_ENV=development tsx watch --ignore './src/app/**' src/server/index.ts",
     "build": "next build && tsc -p tsconfig.server.json",
     "start": "NODE_ENV=production node dist/server/index.js",
+    "benchmark": "node dist/server/benchmark/cli.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "oxlint",

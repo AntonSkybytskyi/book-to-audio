@@ -49,6 +49,7 @@ function start() {
       cause: event.cause,
       workers: event.workers,
       activeWorkers: event.activeWorkers,
+      held: event.held,
     });
   });
   // While the stream is down, poll.

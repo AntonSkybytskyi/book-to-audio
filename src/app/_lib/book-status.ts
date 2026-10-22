@@ -1,18 +1,23 @@
 import type { Book, BookSummary } from "./api";
-import { formatClock, formatMinutes, pluralize } from "./format";
+import { aboutDuration, formatClock, pluralize } from "./format";
+import { libraryTimeLeft } from "./time-left";
 
 const ready = (book: Pick<BookSummary, "doneCount" | "chapterCount">) =>
   `${book.doneCount} of ${pluralize(book.chapterCount, "chapter")} ready`;
 
-/** The status line of a book in the library. */
-export function libraryStatus(book: BookSummary): string {
+const withLeft = (head: string, left: string | null) => (left ? `${head} · ${left}` : head);
+
+/** The status line of a book in the library. `poolPaused`: all conversion is paused. */
+export function libraryStatus(book: BookSummary, poolPaused = false): string {
   switch (book.status) {
     case "ready":
-      return `Ready to convert · about ${formatMinutes(book.estimatedMinutes)}`;
+      return book.estimate
+        ? `Ready to convert · ${aboutDuration(book.estimate.audioSeconds)} of audio`
+        : "Ready to convert";
     case "converting":
-      return `Converting · ${ready(book)}`;
+      return withLeft(`Converting · ${ready(book)}`, libraryTimeLeft(book, poolPaused));
     case "paused":
-      return `Paused · ${ready(book)}`;
+      return withLeft(`Paused · ${ready(book)}`, libraryTimeLeft(book, poolPaused));
     case "done":
       return `Ready to listen · ${ready(book)} · ${formatClock(book.durationSeconds)}${book.outputs.available ? " · Ready to download" : ""}`;
     case "done_with_errors":
@@ -62,11 +67,16 @@ const downloadsPending = (book: BookSummary): boolean =>
 
 /** Keep refreshing a book while work is going on or about to. */
 export const bookIsBusy = (book: Book): boolean =>
+  book.measuring ||
   book.status === "converting" ||
   (book.status === "paused" && book.chapters.some((chapter) => chapter.status === "generating")) ||
   downloadsPending(book);
 
 export const libraryIsBusy = (books: BookSummary[]): boolean =>
   books.some(
-    (book) => book.status === "converting" || book.status === "paused" || downloadsPending(book),
+    (book) =>
+      book.measuring ||
+      book.status === "converting" ||
+      book.status === "paused" ||
+      downloadsPending(book),
   );

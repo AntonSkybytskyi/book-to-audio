@@ -4,6 +4,10 @@
   border-left: 0.35rem solid var(--danger);
 }
 
+.notice {
+  border-left-color: var(--accent);
+}
+
 .inner {
   max-width: var(--column);
   margin: 0 auto;

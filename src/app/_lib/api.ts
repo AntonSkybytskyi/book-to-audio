@@ -1,5 +1,9 @@
 // Client for the book-to-audio API. Mirrors the JSON in src/server/books/views.ts.
 
+import type { SpeedModel, SpeedSource, ThroughputPoint } from "../../shared/estimate";
+
+export type { SpeedModel, SpeedSource, ThroughputPoint };
+
 export type BookStatus = "ready" | "converting" | "paused" | "done" | "done_with_errors";
 export type ChapterStatus = "pending" | "queued" | "generating" | "done" | "failed";
 export type Language = "en" | "uk" | "ru";
@@ -14,7 +18,10 @@ export interface Chapter {
   error: string | null;
   charCount: number;
   wordCount: number;
-  estimatedMinutes: number;
+  /** Characters the engine is given for the chapter; the time estimates are made from them. */
+  preparedChars: number;
+  /** Expected audio length until the chapter is done; null when no voice could say. */
+  estimatedSeconds: number | null;
   durationSeconds: number | null;
   /** Chunks the chapter is split into (0 until it starts) and how many are finished. */
   chunkCount: number;
@@ -54,6 +61,30 @@ export const NO_OUTPUTS: Outputs = {
   zipBytes: null,
 };
 
+/** Who is ahead of a book in the queue, and how long until its turn. Mirrors `QueueView` on the server. */
+export interface QueueInfo {
+  booksAhead: number;
+  startsInSeconds: number | null;
+}
+
+/** Length and conversion time of a book that is not finished. Mirrors `BookEstimateView`. */
+export interface BookEstimate {
+  audioSeconds: number;
+  convertSeconds: number;
+  source: SpeedSource;
+  workers: number;
+  queue: QueueInfo;
+}
+
+/** Time left of a converting or paused book. Mirrors `TimeLeftView`. */
+export interface TimeLeft extends QueueInfo {
+  state: "running" | "waiting" | "waiting_for_speed_test" | "paused" | "pool_paused";
+  remainingSeconds: number | null;
+  /** While `waiting_for_speed_test`: how long the speed test is expected to take yet. */
+  speedTestSeconds: number | null;
+  source: SpeedSource;
+}
+
 export interface BookSummary {
   id: string;
   title: string;
@@ -70,12 +101,17 @@ export interface BookSummary {
   doneCount: number;
   failedCount: number;
   wordCount: number;
-  estimatedMinutes: number;
+  estimate: BookEstimate | null;
+  /** The text is still being counted, so there is no estimate yet; the page is told when it lands. */
+  measuring: boolean;
+  timeLeft: TimeLeft | null;
   durationSeconds: number;
   outputs: Outputs;
 }
 
 export interface Book extends BookSummary {
+  /** The speed behind the estimates, to keep the time left current as chapters progress. */
+  speed: SpeedModel | null;
   chapters: Chapter[];
   availableLanguages: string[];
 }
@@ -88,6 +124,61 @@ export interface PoolStatus {
   cause: "failures" | "disk" | null;
   workers: number;
   activeWorkers: number;
+  /** A speed test has the pool: chapters wait until it is done. */
+  held: boolean;
+}
+
+export type BenchmarkState = "idle" | "waiting" | "running" | "cancelling";
+
+/** The state of the speed test. Mirrors `BenchmarkStatus` in src/server/benchmark/status.ts. */
+export interface BenchmarkStatus {
+  state: BenchmarkState;
+  trigger: "startup" | "manual" | null;
+  progress: number;
+  language: string | null;
+  startedAt: string | null;
+  outcome: "completed" | "cancelled" | "failed" | null;
+  error: string | null;
+  /** How long a run is expected to take, from the last one. */
+  expectedSeconds: number;
+}
+
+/** One voice's result. Mirrors `ResultView` in src/server/benchmark/view.ts. */
+export interface BenchmarkResult {
+  secondsPerKChar: number;
+  rtf: number;
+  encodeFactor: number | null;
+  modelLoadSeconds: number;
+  throughput: ThroughputPoint[];
+  sampleChars: number;
+  sampleAudioSeconds: number;
+  measuredAt: string;
+  novelAudioSeconds: number;
+  novelConvertSeconds: number;
+  outdated: boolean;
+  /** The load average when the run began and ended; the end includes the run itself. */
+  loadStart: number | null;
+  loadEnd: number | null;
+  /** The computer was busier than it has cores when the run began. */
+  busy: boolean;
+}
+
+export interface BenchmarkInfo extends BenchmarkStatus {
+  rows: { language: string; voiceId: string; result: BenchmarkResult | null }[];
+  workers: number;
+  maxWorkers: number;
+  suggestedWorkers: number | null;
+  machine: { cpuCount: number; cpuModel: string };
+  needsRun: boolean;
+}
+
+/** The estimate of an unconverted book as if it were read in another language. */
+export interface LanguageEstimate {
+  estimate: BookEstimate | null;
+  speed: SpeedModel | null;
+  chapterSeconds: number[];
+  /** The book's own text is not counted yet. */
+  measuring: boolean;
 }
 
 export interface Settings {
@@ -164,6 +255,11 @@ export const saveShownLanguages = (shownLanguages: Language[]) =>
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ shownLanguages }),
   });
+export const getBenchmark = () => requestSnapshot<BenchmarkInfo>("/api/benchmark");
+export const startBenchmark = () => request<BenchmarkInfo>("/api/benchmark", { method: "POST" });
+export const cancelBenchmark = () => request<BenchmarkInfo>("/api/benchmark", { method: "DELETE" });
+export const getLanguageEstimate = (id: string, language: Language) =>
+  request<LanguageEstimate>(`/api/books/${id}/estimate?language=${language}`);
 export const getBooks = async (): Promise<Snapshot<BookSummary[]>> => {
   const { data, seq } = await requestSnapshot<{ books: BookSummary[] }>("/api/books");
   return { data: data.books, seq };

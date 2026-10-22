@@ -3,7 +3,7 @@ import { afterEach, beforeEach, vi, type Mock } from "vitest";
 import { ChapterQueue } from "../books/queue.js";
 import { BookRepository } from "../books/repository.js";
 import { PoolStateStore } from "../convert/pool-state.js";
-import { WorkerPool, type PoolLogger } from "../convert/pool.js";
+import { WorkerPool, type PoolDeps, type PoolLogger } from "../convert/pool.js";
 import type { ChapterConverter, ChapterRun, ConvertedChapter } from "../convert/convert-chapter.js";
 import type { AppEvent } from "../events/bus.js";
 import { TtsError } from "../tts/engine.js";
@@ -97,7 +97,7 @@ export interface PoolHarness {
   readonly logged: { level: string; context?: object; message: string }[];
   addBook(chapterCount: number, queued?: boolean): string;
   /** Builds and starts a pool with `workers` workers whose chapters are run by `converter`. */
-  start(converter: ChapterConverter, workers?: number): WorkerPool;
+  start(converter: ChapterConverter, workers?: number, extra?: Partial<PoolDeps>): WorkerPool;
   status(bookId: string, position: number): string | undefined;
   bookStatus(bookId: string): string | undefined;
 }
@@ -173,7 +173,7 @@ export function usePoolHarness(): PoolHarness {
       if (queued) repo.queue(id);
       return id;
     },
-    start(converter, workers = 1) {
+    start(converter, workers = 1, extra = {}) {
       ctx.settings.setWorkers(workers);
       pool = new WorkerPool({
         queue,
@@ -185,6 +185,7 @@ export function usePoolHarness(): PoolHarness {
         logger,
         backoffMs: 2,
         progressIntervalMs: 0,
+        ...extra,
       });
       pool.start();
       return pool;

@@ -12,7 +12,8 @@ const chapter = (position: number, overrides: Partial<Chapter> = {}): Chapter =>
   error: null,
   charCount: 100,
   wordCount: 20,
-  estimatedMinutes: 1,
+  preparedChars: 1,
+  estimatedSeconds: 60,
   durationSeconds: null,
   chunkCount: 0,
   chunksDone: 0,
@@ -37,9 +38,12 @@ const book = (overrides: Partial<Book> = {}): Book => ({
   doneCount: 0,
   failedCount: 0,
   wordCount: 60,
-  estimatedMinutes: 3,
+  estimate: null,
+  measuring: false,
+  timeLeft: null,
   durationSeconds: 0,
   outputs: NO_OUTPUTS,
+  speed: null,
   chapters: [chapter(1), chapter(2), chapter(3)],
   availableLanguages: ["en"],
   ...overrides,
@@ -62,7 +66,7 @@ const chapterEvent = (
   ...overrides,
 });
 
-const summary = (id: string): BookSummary => ({
+const summary = (id: string, overrides: Partial<BookSummary> = {}): BookSummary => ({
   id,
   title: id,
   author: null,
@@ -77,9 +81,12 @@ const summary = (id: string): BookSummary => ({
   doneCount: 0,
   failedCount: 0,
   wordCount: 80,
-  estimatedMinutes: 4,
+  estimate: null,
+  measuring: false,
+  timeLeft: null,
   durationSeconds: 0,
   outputs: NO_OUTPUTS,
+  ...overrides,
 });
 describe("patchBook", () => {
   it("updates the chapter that the event is about and nothing else", () => {
@@ -157,6 +164,7 @@ describe("patchBook", () => {
         cause: "failures",
         workers: 1,
         activeWorkers: 0,
+        held: false,
       }),
     ).toBe(before);
     expect(patchBook(before, { type: "book-added", bookId: "b1" })).toBe(before);
@@ -275,12 +283,16 @@ describe("patchLibrary", () => {
   };
 
   it("updates the status and counts of the book in the event", () => {
-    const books = [summary("b1"), summary("b2")];
+    const books = [summary("b1", { status: "done" }), summary("b2")];
 
     const after = patchLibrary(books, bookEvent);
 
     expect(after?.[1]).toMatchObject({ status: "done", doneCount: 4, durationSeconds: 240 });
     expect(after?.[0]).toBe(books[0]);
+  });
+
+  it("asks for a reload while a book is still converting, because its time left moved", () => {
+    expect(patchLibrary([summary("b1"), summary("b2")], bookEvent)).toBeNull();
   });
 
   it("asks for a reload for a book it does not know and for a new book", () => {
@@ -347,5 +359,55 @@ describe("outputs events", () => {
 
     expect(after?.[0]?.outputs.available).toBe(true);
     expect(after?.[1]).toBe(books[1]);
+  });
+});
+
+const poolEvent = (held: boolean): AppEvent => ({
+  type: "pool",
+  state: "running",
+  error: null,
+  cause: null,
+  workers: 2,
+  activeWorkers: 0,
+  held,
+});
+
+describe("patchLibrary while a book waits for the speed test", () => {
+  const waiting = summary("b1", {
+    timeLeft: {
+      state: "waiting_for_speed_test",
+      remainingSeconds: 100,
+      speedTestSeconds: 60,
+      booksAhead: 0,
+      startsInSeconds: null,
+      source: "benchmark",
+    },
+  });
+  const benchmarkEvent: AppEvent = {
+    type: "benchmark",
+    state: "running",
+    trigger: "manual",
+    progress: 0.5,
+    language: "en",
+    startedAt: null,
+    outcome: null,
+    error: null,
+    expectedSeconds: 180,
+  };
+
+  it("asks again when the pool is let go, so the line stops saying it waits", () => {
+    expect(patchLibrary([waiting], poolEvent(false))).toBeNull();
+  });
+
+  it("asks again as the test moves on, to keep the time it says current", () => {
+    expect(patchLibrary([waiting], benchmarkEvent)).toBeNull();
+  });
+
+  it("leaves the list alone when no book waits for it, and while the pool is only being taken", () => {
+    const books = [summary("b2")];
+
+    expect(patchLibrary(books, poolEvent(false))).toBe(books);
+    expect(patchLibrary(books, benchmarkEvent)).toBe(books);
+    expect(patchLibrary([waiting], poolEvent(true))).toEqual([waiting]);
   });
 });

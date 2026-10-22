@@ -73,6 +73,18 @@
   color: var(--ink-muted);
 }
 
+.estimate {
+  display: grid;
+  gap: 0.25rem;
+  margin-bottom: 0.9rem;
+  font-size: 0.9rem;
+  color: var(--ink-muted);
+}
+
+.estimate:empty {
+  display: none;
+}
+
 .list {
   list-style: none;
   margin: 0;

@@ -23,7 +23,9 @@ const summary = (overrides: Partial<BookSummary> = {}): BookSummary => ({
   doneCount: 3,
   failedCount: 0,
   wordCount: 1000,
-  estimatedMinutes: 90,
+  estimate: null,
+  measuring: false,
+  timeLeft: null,
   durationSeconds: 3725,
   outputs: NO_OUTPUTS,
   ...overrides,
@@ -46,7 +48,8 @@ const chapter = (position: number, overrides: Partial<Chapter> = {}): Chapter =>
   error: null,
   charCount: 1,
   wordCount: 1,
-  estimatedMinutes: 1,
+  preparedChars: 1,
+  estimatedSeconds: 60,
   durationSeconds: null,
   chunkCount: 0,
   chunksDone: 0,
@@ -58,6 +61,7 @@ const chapter = (position: number, overrides: Partial<Chapter> = {}): Chapter =>
 
 const book = (overrides: Partial<Book> = {}): Book => ({
   ...summary(),
+  speed: null,
   chapters: [chapter(1), chapter(2)],
   availableLanguages: ["en"],
   ...overrides,
@@ -65,7 +69,7 @@ const book = (overrides: Partial<Book> = {}): Book => ({
 
 describe("libraryStatus", () => {
   it("says how many chapters are ready in every state but ready", () => {
-    expect(libraryStatus(summary({ status: "ready" }))).toBe("Ready to convert · about 1 h 30 min");
+    expect(libraryStatus(summary({ status: "ready" }))).toBe("Ready to convert");
     expect(libraryStatus(summary())).toBe("Converting · 3 of 10 chapters ready");
     expect(libraryStatus(summary({ status: "paused" }))).toBe("Paused · 3 of 10 chapters ready");
     expect(libraryStatus(summary({ status: "done", doneCount: 10 }))).toBe(
@@ -143,6 +147,12 @@ describe("progress and polling", () => {
         book({ status: "done", outputs: { ...ready, available: false, state: "failed" } }),
       ),
     ).toBe(false);
+  });
+
+  it("keeps refreshing a book, and the library, while its text is still being measured", () => {
+    expect(bookIsBusy(book({ status: "ready", measuring: true }))).toBe(true);
+    expect(bookIsBusy(book({ status: "ready", measuring: false }))).toBe(false);
+    expect(libraryIsBusy([summary({ status: "ready", measuring: true })])).toBe(true);
   });
 
   it("keeps refreshing the library while a book is converting or paused", () => {

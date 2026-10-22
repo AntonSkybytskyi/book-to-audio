@@ -17,6 +17,24 @@ export function formatMinutes(minutes: number): string {
   return m === 0 ? `${h} h` : `${h} h ${m} min`;
 }
 
+/**
+ * A length of time as a person would say it, without false precision: whole minutes under ten,
+ * five minutes up to ten hours, ten minutes beyond. `75 s` is `1 min`, `8100 s` is `2 h 15 min`,
+ * and anything under a minute is `under a minute`.
+ */
+export function formatApprox(seconds: number): string {
+  if (seconds < 60) return "under a minute";
+  const minutes = seconds / 60;
+  const step = minutes < 10 ? 1 : minutes < 600 ? 5 : 10;
+  return formatMinutes(Math.max(1, Math.round(minutes / step) * step));
+}
+
+/** `about 2 h 15 min`, or `under a minute`, which needs no `about`. */
+export function aboutDuration(seconds: number): string {
+  const text = formatApprox(seconds);
+  return text === "under a minute" ? text : `about ${text}`;
+}
+
 /** File size for people: `980 KB`, `74 MB`, `1.2 GB`. */
 export function formatBytes(bytes: number): string {
   const kb = bytes / 1024;

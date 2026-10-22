@@ -21,6 +21,30 @@ export function hostname(host: string): string {
 const forbidden = (reply: FastifyReply, message: string) =>
   reply.code(403).send({ error: "forbidden", message });
 
+/** The request comes from another site: a browser says so (`Sec-Fetch-Site`), or its `Origin` is not the host asked. */
+function fromAnotherSite(req: FastifyRequest): boolean {
+  const site = req.headers["sec-fetch-site"];
+  if (site !== undefined && site !== "same-origin" && site !== "none") return true;
+  const origin = req.headers.origin;
+  if (origin === undefined) return false;
+  let originHost: string | null = null;
+  try {
+    originHost = new URL(origin).host.toLowerCase();
+  } catch {
+    // "null" and other junk fall through to the rejection below.
+  }
+  return originHost !== (req.headers.host ?? "").toLowerCase();
+}
+
+/**
+ * A route hook for a GET that starts work on the server (the text rules run for a language), so that
+ * another site cannot trigger it. It is set on the route itself, not matched against the URL, which
+ * can be written in ways (`%65stimate`) that still reach the same route.
+ */
+export async function sameOriginOnly(req: FastifyRequest, reply: FastifyReply) {
+  if (fromAnotherSite(req)) return forbidden(reply, "Requests from other sites are not allowed.");
+}
+
 /**
  * Keeps other websites from using the app through the owner's browser.
  *
@@ -38,22 +62,6 @@ export function registerHostAndOriginGuard(app: FastifyInstance, extraHosts: rea
       return forbidden(reply, "This address is not allowed. Open the app at http://localhost.");
     }
     if (!UNSAFE_METHODS.has(req.method)) return;
-
-    const site = req.headers["sec-fetch-site"];
-    if (site !== undefined && site !== "same-origin" && site !== "none") {
-      return forbidden(reply, "Requests from other sites are not allowed.");
-    }
-    const origin = req.headers.origin;
-    if (origin !== undefined) {
-      let originHost: string | null = null;
-      try {
-        originHost = new URL(origin).host.toLowerCase();
-      } catch {
-        // "null" and other junk fall through to the rejection below.
-      }
-      if (originHost !== host.toLowerCase()) {
-        return forbidden(reply, "Requests from other sites are not allowed.");
-      }
-    }
+    if (fromAnotherSite(req)) return forbidden(reply, "Requests from other sites are not allowed.");
   });
 }

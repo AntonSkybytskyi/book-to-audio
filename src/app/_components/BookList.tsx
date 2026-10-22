@@ -12,6 +12,7 @@ import { DeleteBookDialog } from "./DeleteBookDialog";
 import { useLiveEvents, useLiveStatus } from "../_lib/events";
 import { patchLibrary } from "../_lib/live-patch";
 import { usePoll } from "../_lib/use-poll";
+import { usePool } from "../_lib/pool-store";
 import { ProgressBar } from "./ProgressBar";
 import styles from "./BookList.module.css";
 import shared from "./shared.module.css";
@@ -41,6 +42,7 @@ function Shelf({ onRetry }: { onRetry: () => void }) {
   useLiveEvents(
     useCallback((event, seq) => patch((current) => patchLibrary(current, event), seq), [patch]),
   );
+  const poolPaused = usePool()?.state === "paused";
   const [deleting, setDeleting] = useState<BookSummary | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
 
@@ -97,7 +99,7 @@ function Shelf({ onRetry }: { onRetry: () => void }) {
               <p className={styles.meta}>
                 {[book.author, languageName(book.language)].filter(Boolean).join(" · ")}
               </p>
-              <p className={styles.status}>{libraryStatus(book)}</p>
+              <p className={styles.status}>{libraryStatus(book, poolPaused)}</p>
               {(book.status === "converting" || book.status === "paused") && (
                 <ProgressBar
                   thin

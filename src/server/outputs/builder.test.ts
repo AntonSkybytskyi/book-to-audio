@@ -42,6 +42,51 @@ describe("OutputBuilder", () => {
     expect(h.files(id)).toEqual(["book.m4b", "book.zip"]);
   });
 
+  it("says when no build is left, so something that waited for a quiet machine can go", async () => {
+    let idle = 0;
+    const builder = h.restart({ onIdle: () => idle++ });
+    const first = h.addDoneBook();
+    const second = h.addDoneBook();
+    builder.start();
+    await settled(() => h.producer.isRunning(first));
+    expect(builder.anyBusy).toBe(true);
+
+    h.producer.release(first);
+    await settled(() => h.producer.isRunning(second));
+    expect(idle).toBe(0); // one more is waiting its turn
+    h.producer.release(second);
+    await settled(() => idle === 1);
+
+    expect(builder.anyBusy).toBe(false);
+    await builder.stop();
+  });
+
+  it("does not start a build while the pool is held for the speed test, and starts it when it is over", async () => {
+    let held = true;
+    const builder = h.restart({ hold: () => held });
+    const id = h.addDoneBook();
+    builder.start();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(h.producer.started).toEqual([]);
+    expect(builder.anyBusy).toBe(true); // queued
+
+    held = false;
+    h.ctx.bus.publish({
+      type: "pool",
+      state: "running",
+      error: null,
+      cause: null,
+      workers: 1,
+      activeWorkers: 0,
+      held: false,
+    });
+    await settled(() => h.producer.isRunning(id));
+
+    h.producer.release(id);
+    await settled(() => h.state(id) === "ready");
+    await builder.stop();
+  });
+
   it("starts a build when the pool announces that a book is done", async () => {
     h.builder.start();
     h.producer.hold = false;

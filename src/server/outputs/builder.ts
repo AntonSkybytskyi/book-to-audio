@@ -26,6 +26,10 @@ export interface OutputBuilderDeps {
   concurrency?: number;
   /** Shortest time between progress updates (saved and published). */
   progressIntervalMs?: number;
+  /** True while no new build should start (the pool is held for the speed test); queued ones wait. */
+  hold?: () => boolean;
+  /** Called when no build is running or waiting any more; the pool uses it to look for an idle moment. */
+  onIdle?: () => void;
 }
 
 export interface RequestOptions {
@@ -142,6 +146,11 @@ export class OutputBuilder {
     this.request(bookId, { force: true });
   }
 
+  /** Some build is queued or running. */
+  get anyBusy(): boolean {
+    return this.running.size > 0 || this.queue.length > 0;
+  }
+
   /** A build of the book is queued or running (or just finishing). */
   isBusy(bookId: string): boolean {
     return this.running.has(bookId) || this.queue.includes(bookId);
@@ -171,6 +180,9 @@ export class OutputBuilder {
       queueMicrotask(() => this.refresh(event.bookId));
     } else if (event.type === "book-deleted") {
       this.published.delete(event.bookId);
+    } else if (event.type === "pool" && !event.held && this.queue.length > 0) {
+      // The speed test is over: builds that waited for it can start.
+      queueMicrotask(() => this.pump());
     }
   }
 
@@ -187,7 +199,7 @@ export class OutputBuilder {
 
   private pump(): void {
     const { concurrency = 1 } = this.deps;
-    while (!this.stopped && this.running.size < concurrency) {
+    while (!this.stopped && this.running.size < concurrency && !this.deps.hold?.()) {
       const bookId = this.queue.shift();
       if (bookId === undefined) return;
       const job: Job = {
@@ -253,6 +265,7 @@ export class OutputBuilder {
       if (this.running.get(job.bookId) === job) this.running.delete(job.bookId);
       try {
         this.pump();
+        if (!this.anyBusy) this.deps.onIdle?.();
       } catch (error) {
         this.deps.logger?.error({ err: error }, "could not start the next build");
       }

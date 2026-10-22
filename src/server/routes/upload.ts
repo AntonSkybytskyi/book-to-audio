@@ -4,10 +4,12 @@ import { pipeline } from "node:stream/promises";
 import type { FastifyInstance } from "fastify";
 import { chooseLanguage } from "../books/language-choice.js";
 import { countWords } from "../books/estimate.js";
+import type { PreparedCounter } from "../books/prepared-counter.js";
 import type { BookRepository } from "../books/repository.js";
 import type { Storage } from "../books/storage.js";
 import { loadBookView } from "../books/views.js";
 import type { EventBus } from "../events/bus.js";
+import type { Estimator } from "../speed/estimator.js";
 import { EpubError } from "../epub/errors.js";
 import { ParserBusyError } from "../epub/worker-parser.js";
 import type { ParsedEpub } from "../epub/types.js";
@@ -21,6 +23,9 @@ export interface UploadDeps {
   bus: EventBus;
   /** Parses the stored upload. Reads the file itself, so the server never holds it in memory. */
   parseEpub: (filePath: string) => Promise<ParsedEpub>;
+  estimator: Estimator;
+  /** Counts the characters the engine will be given, in the background, for the time estimates. */
+  counter: Pick<PreparedCounter, "enqueue">;
 }
 
 /** Carries the code that the API error handler maps to a 413 response. */
@@ -44,7 +49,7 @@ const STATUS_BY_EPUB_ERROR: Record<EpubError["code"], number> = {
 /** `POST /api/books`: stores the upload, parses it and returns the new book. */
 export function registerUpload(
   api: FastifyInstance,
-  { repo, storage, engine, bus, parseEpub }: UploadDeps,
+  { repo, storage, engine, bus, parseEpub, estimator, counter }: UploadDeps,
 ) {
   api.post("/books", async (req, reply) => {
     if (!req.isMultipart()) {
@@ -108,8 +113,9 @@ export function registerUpload(
       throw error; // Size limits and everything unexpected go to the error handler.
     }
 
-    const view = loadBookView(repo, engine, id);
+    const view = loadBookView(repo, engine, estimator, id);
     if (!view) throw new Error("book vanished after insert");
+    counter.enqueue(id);
     bus.publish({ type: "book-added", bookId: id });
     return reply.code(201).send(view);
   });

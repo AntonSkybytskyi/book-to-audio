@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useSyncExternalStore } from "react";
-import type { BookStatus, ChapterStatus, Outputs, PoolStatus } from "./api";
+import type { BenchmarkStatus, BookStatus, ChapterStatus, Outputs, PoolStatus } from "./api";
 
 // Mirrors the payloads in src/server/events/bus.ts.
 export interface ChapterEvent {
@@ -49,13 +49,26 @@ export interface OutputsEvent extends Outputs {
   bookId: string;
 }
 
+/** The speed test started, moved on or ended. */
+export interface BenchmarkEvent extends BenchmarkStatus {
+  type: "benchmark";
+}
+
+/** The prepared text of a book was counted, so its length and conversion time can be told now. */
+export interface BookCountedEvent {
+  type: "book-counted";
+  bookId: string;
+}
+
 export type AppEvent =
   | ChapterEvent
   | BookEvent
   | PoolEvent
   | BookAddedEvent
   | BookDeletedEvent
-  | OutputsEvent;
+  | OutputsEvent
+  | BenchmarkEvent
+  | BookCountedEvent;
 
 /** `live`: the stream is open and pages need not poll. `down`: poll until it comes back. */
 export type LiveStatus = "connecting" | "live" | "down";
@@ -63,7 +76,16 @@ export type LiveStatus = "connecting" | "live" | "down";
 /** Called with every event and its sequence number (higher means newer). */
 export type EventListener = (event: AppEvent, seq: number) => void;
 
-const EVENT_TYPES = ["chapter", "book", "pool", "book-added", "book-deleted", "outputs"] as const;
+const EVENT_TYPES = [
+  "chapter",
+  "book",
+  "pool",
+  "book-added",
+  "book-deleted",
+  "outputs",
+  "benchmark",
+  "book-counted",
+] as const;
 const RECONNECT_MS = 3000;
 
 // One EventSource for the whole page, shared by everything that listens.

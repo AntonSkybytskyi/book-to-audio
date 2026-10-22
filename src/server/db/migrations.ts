@@ -161,4 +161,74 @@ export const migrations: Migration[] = [
       UPDATE books SET language_source = 'chosen';
     `,
   },
+  {
+    id: 8,
+    name: "speed_benchmark",
+    sql: `
+      -- Prepared characters of a chapter: what the speech engine is given after the text rules,
+      -- so a time estimate does not run the rules again. Null until counted (books from before this
+      -- migration are counted in the background at startup); a count that failed is the raw length.
+      ALTER TABLE chapters ADD COLUMN prepared_chars INTEGER;
+
+      -- The latest benchmark of each voice: one row per engine and voice, replaced by the next run.
+      CREATE TABLE benchmark_results (
+        engine TEXT NOT NULL,
+        voice_id TEXT NOT NULL,
+        language TEXT NOT NULL,
+        -- Seconds of audio per 1,000 characters of prepared text.
+        seconds_per_kchar REAL NOT NULL,
+        -- Seconds of synthesis per second of audio, one session, model load excluded.
+        rtf REAL NOT NULL,
+        -- Seconds of Opus encoding per second of audio; null when nothing was encoded.
+        encode_factor REAL,
+        model_load_ms INTEGER NOT NULL,
+        -- JSON array of {workers, audioPerSecond}: audio per second of waiting with that many sessions.
+        throughput TEXT NOT NULL,
+        sample_chars INTEGER NOT NULL,
+        sample_audio_seconds REAL NOT NULL,
+        cpu_count INTEGER NOT NULL,
+        cpu_model TEXT NOT NULL,
+        -- TEXT_PROCESSING_VERSION: the speech rate is per character of text the rules produce.
+        text_version INTEGER NOT NULL,
+        measured_at TEXT NOT NULL,
+        PRIMARY KEY (engine, voice_id)
+      ) STRICT;
+
+      -- What real conversions taught the app about a voice: a running average of the speech rate and of
+      -- how much slower than the benchmark chapters were read. Cleared when the voice is benchmarked again.
+      CREATE TABLE speed_learning (
+        engine TEXT NOT NULL,
+        voice_id TEXT NOT NULL,
+        seconds_per_kchar REAL NOT NULL,
+        slowdown REAL NOT NULL,
+        samples INTEGER NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        PRIMARY KEY (engine, voice_id)
+      ) STRICT;
+    `,
+  },
+  {
+    id: 9,
+    name: "benchmark_load",
+    sql: `
+      -- The 1-minute load average when a benchmark run began and ended. The one at the start says how
+      -- busy the computer was with other programs; the one at the end includes the benchmark itself.
+      ALTER TABLE benchmark_results ADD COLUMN load_start REAL;
+      ALTER TABLE benchmark_results ADD COLUMN load_end REAL;
+      -- How many times in a row the voice was measured while the computer was busy; a busy run is
+      -- repeated once at the next start, not again and again.
+      ALTER TABLE benchmark_results ADD COLUMN load_attempt INTEGER NOT NULL DEFAULT 1;
+      -- How long the run took, so the pages can say how long a speed test is expected to last.
+      ALTER TABLE benchmark_results ADD COLUMN run_seconds REAL;
+    `,
+  },
+  {
+    id: 10,
+    name: "prepared_chars_approx",
+    sql: `
+      -- 1 when prepared_chars is only the raw length, because the text rules gave up on the chapter (or
+      -- ran out of time): good enough for an estimate, counted again later.
+      ALTER TABLE chapters ADD COLUMN prepared_approx INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
 ];

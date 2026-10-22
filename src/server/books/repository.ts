@@ -54,6 +54,26 @@ export interface Chapter {
   audioVersion: number;
   /** Why the last regeneration failed; the chapter kept its previous audio. */
   regenError: string | null;
+  /** Characters the engine is given for the chapter after the text rules; the raw length until counted. */
+  preparedChars: number;
+  /** `preparedChars` is a count and not the raw length stand-in. */
+  counted: boolean;
+}
+
+/** A chapter that still has to be read (or is being read), for time estimates. */
+export interface ChapterLoad {
+  status: ChapterStatus;
+  progress: number;
+  preparedChars: number;
+  counted: boolean;
+}
+
+/** The chapters of a book that is not finished, in reading order. */
+export interface BookLoad {
+  bookId: string;
+  language: string;
+  status: BookStatus;
+  chapters: ChapterLoad[];
 }
 
 export interface NewBook {
@@ -74,6 +94,8 @@ export interface NewChapter {
   title: string;
   text: string;
   wordCount: number;
+  /** Characters after the text rules; left out when not counted, and counted later. */
+  preparedChars?: number | null;
 }
 
 interface BookRow {
@@ -121,6 +143,8 @@ interface ChapterRow {
   chunks_done: number;
   audio_version: number;
   regen_error: string | null;
+  prepared_chars: number;
+  counted: number;
 }
 
 const toBook = (row: BookRow): Book => ({
@@ -152,6 +176,8 @@ const toChapter = (row: ChapterRow): Chapter => ({
   chunksDone: row.chunks_done,
   audioVersion: row.audio_version,
   regenError: row.regen_error,
+  preparedChars: row.prepared_chars,
+  counted: row.counted === 1,
 });
 
 const TOTALS_SQL = `
@@ -204,8 +230,8 @@ export class BookRepository {
          @declaredLanguage, @coverMime, @coverPath, @sourcePath)`,
     );
     const insertChapter = this.db.prepare(
-      `INSERT INTO chapters (book_id, position, title, text, char_count, word_count)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO chapters (book_id, position, title, text, char_count, word_count, prepared_chars)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
     );
     this.db.transaction(() => {
       insertBook.run({
@@ -215,7 +241,15 @@ export class BookRepository {
         ...book,
       });
       chapters.forEach((c, i) =>
-        insertChapter.run(book.id, i + 1, c.title, c.text, c.text.length, c.wordCount),
+        insertChapter.run(
+          book.id,
+          i + 1,
+          c.title,
+          c.text,
+          c.text.length,
+          c.wordCount,
+          c.preparedChars ?? null,
+        ),
       );
     })();
   }
@@ -239,7 +273,9 @@ export class BookRepository {
     const rows = this.db
       .prepare(
         `SELECT position, title, char_count, word_count, status, progress, error, audio_path,
-                duration_seconds, chunk_count, chunks_done, audio_version, regen_error
+                duration_seconds, chunk_count, chunks_done, audio_version, regen_error,
+                coalesce(prepared_chars, char_count) AS prepared_chars,
+                prepared_chars IS NOT NULL AS counted
          FROM chapters WHERE book_id = ? ORDER BY position`,
       )
       .all(bookId) as ChapterRow[];
@@ -250,7 +286,9 @@ export class BookRepository {
     const row = this.db
       .prepare(
         `SELECT position, title, char_count, word_count, status, progress, error, audio_path,
-                duration_seconds, chunk_count, chunks_done, audio_version, regen_error
+                duration_seconds, chunk_count, chunks_done, audio_version, regen_error,
+                coalesce(prepared_chars, char_count) AS prepared_chars,
+                prepared_chars IS NOT NULL AS counted
          FROM chapters WHERE book_id = ? AND position = ?`,
       )
       .get(bookId, position) as ChapterRow | undefined;
@@ -265,13 +303,62 @@ export class BookRepository {
 
   /** The owner's choice of language for a book that has not started converting. */
   setLanguage(id: string, language: string): boolean {
-    const result = this.db
+    return this.db
+      .transaction(() => {
+        // The text rules differ by language, so the counts of the old one are no longer right.
+        const before = this.db.prepare("SELECT language FROM books WHERE id = ?").pluck().get(id);
+        const result = this.db
+          .prepare(
+            `UPDATE books SET language = ?, language_source = 'chosen', updated_at = ${NOW}
+             WHERE id = ? AND status = 'ready'`,
+          )
+          .run(language, id);
+        if (result.changes > 0 && before !== language) {
+          this.db
+            .prepare(
+              "UPDATE chapters SET prepared_chars = NULL, prepared_approx = 0 WHERE book_id = ?",
+            )
+            .run(id);
+        }
+        return result.changes > 0;
+      })
+      .immediate();
+  }
+
+  /** Every book that is not finished with its chapters, earliest queued first (ready books last). */
+  workload(): BookLoad[] {
+    const rows = this.db
       .prepare(
-        `UPDATE books SET language = ?, language_source = 'chosen', updated_at = ${NOW}
-         WHERE id = ? AND status = 'ready'`,
+        `SELECT b.id, b.language, b.status, c.status AS chapter_status, c.progress,
+                coalesce(c.prepared_chars, c.char_count) AS chars, c.prepared_chars IS NOT NULL AS counted
+         FROM books b JOIN chapters c ON c.book_id = b.id
+         WHERE b.status IN ('ready', 'converting', 'paused')
+         ORDER BY b.queued_at IS NULL, b.queued_at, b.rowid, c.position`,
       )
-      .run(language, id);
-    return result.changes > 0;
+      .all() as {
+      id: string;
+      language: string;
+      status: BookStatus;
+      chapter_status: ChapterStatus;
+      progress: number;
+      chars: number;
+      counted: number;
+    }[];
+    const books: BookLoad[] = [];
+    for (const row of rows) {
+      let book = books.at(-1);
+      if (book?.bookId !== row.id) {
+        book = { bookId: row.id, language: row.language, status: row.status, chapters: [] };
+        books.push(book);
+      }
+      book.chapters.push({
+        status: row.chapter_status,
+        progress: row.progress,
+        preparedChars: row.chars,
+        counted: row.counted === 1,
+      });
+    }
+    return books;
   }
 
   /** Moves a `ready` book to `converting` and queues all its chapters. */

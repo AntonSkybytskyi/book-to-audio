@@ -41,6 +41,7 @@ describe("WorkerPool: events", () => {
         cause: null,
         workers: 1,
         activeWorkers: 1,
+        held: false,
       });
     });
 
