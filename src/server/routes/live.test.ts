@@ -478,7 +478,12 @@ describe("live updates and pool routes", () => {
     it("reports the worker count, its range and the default", async () => {
       const res = await app.inject({ url: "/api/settings" });
 
-      expect(res.json()).toEqual({ workers: 2, maxWorkers: 4, defaultWorkers: 2 });
+      expect(res.json()).toEqual({
+        workers: 2,
+        maxWorkers: 4,
+        defaultWorkers: 2,
+        shownLanguages: ["en", "uk"],
+      });
     });
 
     it("changes the worker count of the running pool and keeps it", async () => {

@@ -83,6 +83,15 @@ export function registerBookRoutes(api: FastifyInstance, deps: BookRouteDeps) {
         "This book has already been converted or is converting.",
       );
     }
+    // English is only a placeholder for a book whose language nobody could tell: the owner picks.
+    if (book.languageSource === "unknown") {
+      return sendError(
+        reply,
+        409,
+        "language_not_chosen",
+        "Choose the language of the book first: it could not be detected.",
+      );
+    }
     if (!pickVoice(engine, book.language)) {
       const name = LANGUAGE_NAMES[book.language as Language] ?? book.language;
       return sendError(

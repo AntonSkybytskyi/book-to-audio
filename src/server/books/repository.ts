@@ -1,5 +1,6 @@
 import type Database from "better-sqlite3";
 import type { OutputRow, OutputState } from "../outputs/view.js";
+import type { LanguageSource } from "./language-choice.js";
 
 export type BookStatus = "ready" | "converting" | "paused" | "done" | "done_with_errors";
 export type ChapterStatus = "pending" | "queued" | "generating" | "done" | "failed";
@@ -9,6 +10,11 @@ export interface Book {
   title: string;
   author: string | null;
   language: string;
+  /** Where `language` came from, and how sure the text detection was. */
+  languageSource: LanguageSource;
+  languageConfidence: number;
+  /** The supported language the book's metadata names, if any. */
+  declaredLanguage: string | null;
   status: BookStatus;
   coverMime: string | null;
   coverPath: string | null;
@@ -55,6 +61,10 @@ export interface NewBook {
   title: string;
   author: string | null;
   language: string;
+  /** Where `language` came from; `unknown` when not given. */
+  languageSource?: LanguageSource;
+  languageConfidence?: number;
+  declaredLanguage?: string | null;
   coverMime: string | null;
   coverPath: string | null;
   sourcePath: string;
@@ -71,6 +81,9 @@ interface BookRow {
   title: string;
   author: string | null;
   language: string;
+  language_source: LanguageSource;
+  language_confidence: number;
+  declared_language: string | null;
   status: BookStatus;
   cover_mime: string | null;
   cover_path: string | null;
@@ -115,6 +128,9 @@ const toBook = (row: BookRow): Book => ({
   title: row.title,
   author: row.author,
   language: row.language,
+  languageSource: row.language_source,
+  languageConfidence: row.language_confidence,
+  declaredLanguage: row.declared_language,
   status: row.status,
   coverMime: row.cover_mime,
   coverPath: row.cover_path,
@@ -182,15 +198,22 @@ export class BookRepository {
 
   insert(book: NewBook, chapters: readonly NewChapter[]): void {
     const insertBook = this.db.prepare(
-      `INSERT INTO books (id, title, author, language, cover_mime, cover_path, source_path)
-       VALUES (@id, @title, @author, @language, @coverMime, @coverPath, @sourcePath)`,
+      `INSERT INTO books (id, title, author, language, language_source, language_confidence,
+         declared_language, cover_mime, cover_path, source_path)
+       VALUES (@id, @title, @author, @language, @languageSource, @languageConfidence,
+         @declaredLanguage, @coverMime, @coverPath, @sourcePath)`,
     );
     const insertChapter = this.db.prepare(
       `INSERT INTO chapters (book_id, position, title, text, char_count, word_count)
        VALUES (?, ?, ?, ?, ?, ?)`,
     );
     this.db.transaction(() => {
-      insertBook.run(book);
+      insertBook.run({
+        languageSource: "unknown",
+        languageConfidence: 0,
+        declaredLanguage: null,
+        ...book,
+      });
       chapters.forEach((c, i) =>
         insertChapter.run(book.id, i + 1, c.title, c.text, c.text.length, c.wordCount),
       );
@@ -240,11 +263,12 @@ export class BookRepository {
       0) as number;
   }
 
-  /** Changes the language of a book that has not started converting. */
+  /** The owner's choice of language for a book that has not started converting. */
   setLanguage(id: string, language: string): boolean {
     const result = this.db
       .prepare(
-        `UPDATE books SET language = ?, updated_at = ${NOW} WHERE id = ? AND status = 'ready'`,
+        `UPDATE books SET language = ?, language_source = 'chosen', updated_at = ${NOW}
+         WHERE id = ? AND status = 'ready'`,
       )
       .run(language, id);
     return result.changes > 0;

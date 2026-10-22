@@ -1,4 +1,5 @@
 import type Database from "better-sqlite3";
+import { isLanguage, LANGUAGES, type Language } from "../books/languages.js";
 
 export interface SettingsView {
   workers: number;
@@ -6,7 +7,12 @@ export interface SettingsView {
   maxWorkers: number;
   /** Used until the owner picks a number. */
   defaultWorkers: number;
+  /** The languages the language picker offers, in the order of `LANGUAGES`. */
+  shownLanguages: Language[];
 }
+
+/** English and Ukrainian are shown until the owner changes it; Russian is supported but hidden. */
+export const DEFAULT_SHOWN_LANGUAGES: readonly Language[] = ["en", "uk"];
 
 export interface SettingsOptions {
   /** Number of CPU cores. */
@@ -15,7 +21,7 @@ export interface SettingsOptions {
   envWorkers?: number;
 }
 
-/** Owner-chosen settings, stored as key/value rows. Slice 5 adds language settings here. */
+/** Owner-chosen settings, stored as key/value rows. */
 export class SettingsStore {
   readonly maxWorkers: number;
   readonly defaultWorkers: number;
@@ -48,11 +54,32 @@ export class SettingsStore {
     this.write("workers", String(count));
   }
 
+  /** The saved languages of the picker, else English and Ukrainian. */
+  shownLanguages(): Language[] {
+    const saved = this.read("shown_languages");
+    if (saved === undefined) return [...DEFAULT_SHOWN_LANGUAGES];
+    try {
+      const parsed: unknown = JSON.parse(saved);
+      const codes = Array.isArray(parsed) ? parsed.filter(isShownCode) : [];
+      return codes.length > 0 ? ordered(codes) : [...DEFAULT_SHOWN_LANGUAGES];
+    } catch {
+      return [...DEFAULT_SHOWN_LANGUAGES];
+    }
+  }
+
+  /** Throws a RangeError for an unknown language, or for a list that would hide every language. */
+  setShownLanguages(codes: readonly string[]): void {
+    if (!codes.every(isLanguage)) throw new RangeError("unknown language");
+    if (codes.length === 0) throw new RangeError("at least one language has to stay shown");
+    this.write("shown_languages", JSON.stringify(ordered(codes)));
+  }
+
   view(): SettingsView {
     return {
       workers: this.workers(),
       maxWorkers: this.maxWorkers,
       defaultWorkers: this.defaultWorkers,
+      shownLanguages: this.shownLanguages(),
     };
   }
 
@@ -72,3 +99,10 @@ export class SettingsStore {
       .run(key, value);
   }
 }
+
+const isShownCode = (value: unknown): value is Language =>
+  typeof value === "string" && isLanguage(value);
+
+/** Without repeats, in the order of `LANGUAGES`. */
+const ordered = (codes: readonly Language[]): Language[] =>
+  LANGUAGES.filter((code) => codes.includes(code));

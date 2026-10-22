@@ -14,8 +14,12 @@ const DEFAULT_MIN_FREE_BYTES = 500 * 1024 ** 2;
 export interface ChunkMeta {
   engine: string;
   voice: string;
+  /** The speaker of a multi-speaker voice, null for a single-speaker one. */
+  speaker: string | null;
   sampleRate: number;
   chunkCount: number;
+  /** `TEXT_PROCESSING_VERSION`: chunks made from text prepared under other rules are not reused. */
+  textVersion: number;
 }
 
 export interface ChunkStoreOptions {
@@ -38,8 +42,9 @@ async function freeBytesOf(dir: string): Promise<number> {
  * it is made, in `audio/<book>/<NN>.parts/`. The encoder writes to a temporary file
  * and renames it, so a file that exists is complete. That makes the directory the
  * source of truth for where to resume after a crash. `meta.json` records what the
- * chunks were made with; if the engine, voice, sample rate or chunk count differ,
- * they are thrown away instead of being joined with new ones.
+ * chunks were made with; if the engine, voice, speaker, sample rate or chunk count differ,
+ * they are thrown away instead of being joined with new ones. The same goes for the speaker and
+ * the version of the text rules.
  */
 export class ChunkStore {
   private readonly minFreeBytes: number;
@@ -64,8 +69,10 @@ export class ChunkStore {
       format: FORMAT,
       engine: meta.engine,
       voice: meta.voice,
+      speaker: meta.speaker,
       sampleRate: meta.sampleRate,
       chunkCount: meta.chunkCount,
+      textVersion: meta.textVersion,
     });
     if (readText(path.join(dir, META_FILE)) !== wanted)
       fs.rmSync(dir, { recursive: true, force: true });

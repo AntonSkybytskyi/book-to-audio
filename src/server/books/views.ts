@@ -30,6 +30,11 @@ export interface BookSummaryView {
   title: string;
   author: string | null;
   language: string;
+  /** How `language` was found: from the text, the metadata, not at all, or chosen by the owner. */
+  languageSource: BookWithTotals["languageSource"];
+  languageConfidence: number;
+  /** The supported language the book's metadata names, if any. */
+  declaredLanguage: string | null;
   status: BookWithTotals["status"];
   hasCover: boolean;
   createdAt: string;
@@ -54,6 +59,9 @@ export const toSummaryView = (book: BookWithTotals): BookSummaryView => ({
   title: book.title,
   author: book.author,
   language: book.language,
+  languageSource: book.languageSource,
+  languageConfidence: book.languageConfidence,
+  declaredLanguage: book.declaredLanguage,
   status: book.status,
   hasCover: book.coverPath !== null,
   createdAt: book.createdAt,

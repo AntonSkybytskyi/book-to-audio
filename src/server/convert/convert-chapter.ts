@@ -4,8 +4,9 @@ import type { EncodedAudio, PcmInput } from "../audio/ffmpeg.js";
 import type { ClaimedChapter } from "../books/queue.js";
 import type { Storage } from "../books/storage.js";
 import { UserFacingError } from "../errors.js";
-import { chunkText } from "../tts/chunk.js";
+import { TEXT_PROCESSING_VERSION } from "../text/index.js";
 import { pickVoice, TtsError, type PcmAudio, type TtsEngine } from "../tts/engine.js";
+import { prepareInThread, type TextPreparer } from "./chapter-text.js";
 import type { ChunkStore } from "./chunk-store.js";
 import { DEFAULT_RETRY_DELAYS_MS, sleep, type Sleep } from "./retry.js";
 import type { SessionHolder } from "./sessions.js";
@@ -29,6 +30,8 @@ export interface ChapterConverterDeps {
     fallbackSeconds?: number | null,
   ) => Promise<EncodedAudio>;
   logger?: ConverterLogger;
+  /** Prepares and splits a chapter's text; production passes one that runs in a worker thread. */
+  prepareText?: TextPreparer;
   /** Waits before each retry of a chunk; its length is the number of retries. */
   retryDelaysMs?: readonly number[];
   sleep?: Sleep;
@@ -80,6 +83,7 @@ export function createChapterConverter({
   encode,
   join,
   logger,
+  prepareText = prepareInThread,
   retryDelaysMs = DEFAULT_RETRY_DELAYS_MS,
   sleep: wait = sleep,
 }: ChapterConverterDeps): ChapterConverter {
@@ -133,18 +137,22 @@ export function createChapterConverter({
         throw new TtsError("voice_not_found", `No ${task.language} voice is installed`);
       }
 
-      const texts = chunkText(task.text, engine.maxInputChars, task.language);
+      const texts = await prepareText(task.text, task.language, engine.maxInputChars, signal);
+      if (signal.aborted) throw cancelled();
       if (texts.length === 0) {
         throw new TtsError("bad_input", "This chapter has no text to read aloud.");
       }
       const total = texts.length;
 
-      // Chunks are only reused if they were made by this engine and voice for the same split.
+      // Chunks are only reused if they were made by this engine, voice and speaker, from text
+      // prepared by the same rules, for the same split.
       const first = store.open(task.bookId, task.position, {
         engine: engine.id,
         voice: voice.id,
+        speaker: voice.speaker ?? null,
         sampleRate: voice.sampleRate,
         chunkCount: total,
+        textVersion: TEXT_PROCESSING_VERSION,
       });
       if (!run.saveProgress(first, total)) throw cancelled();
 

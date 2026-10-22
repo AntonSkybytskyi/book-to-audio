@@ -143,4 +143,22 @@ export const migrations: Migration[] = [
       CREATE INDEX book_outputs_state ON book_outputs (state, queued_at);
     `,
   },
+  {
+    id: 7,
+    name: "book_language_detection",
+    sql: `
+      -- Where books.language came from: the text of the book (detected), its dc:language
+      -- (metadata), nothing (unknown: English is only a placeholder) or the owner (chosen).
+      ALTER TABLE books ADD COLUMN language_source TEXT NOT NULL DEFAULT 'unknown'
+        CHECK (language_source IN ('detected', 'metadata', 'unknown', 'chosen'));
+      -- 0 to 1: how sure the text detection was; 0 when it did not decide.
+      ALTER TABLE books ADD COLUMN language_confidence REAL NOT NULL DEFAULT 0
+        CHECK (language_confidence >= 0 AND language_confidence <= 1);
+      -- The supported language the book's dc:language names, if any.
+      ALTER TABLE books ADD COLUMN declared_language TEXT;
+      -- Books from before this migration had their language set by the owner or from dc:language,
+      -- never by the text: they are 'chosen', so no preview asks to check them again.
+      UPDATE books SET language_source = 'chosen';
+    `,
+  },
 ];

@@ -7,6 +7,8 @@ export interface PiperSessionOptions {
   bin: string;
   modelPath: string;
   sampleRate: number;
+  /** The speaker of a multi-speaker model; sent with every chunk. */
+  speakerId?: number;
   /** Folder for the scratch directories of sessions; created private to this user if missing. */
   scratchRoot: string;
   /** Longest wait for one chunk. */
@@ -129,7 +131,9 @@ export class PiperSession implements TtsSession {
     });
 
     // A JSON string keeps paragraph breaks on one line.
-    this.child.stdin.write(`${JSON.stringify({ text: text.trim(), output_file: outputFile })}\n`);
+    const request: Record<string, unknown> = { text: text.trim(), output_file: outputFile };
+    if (this.options.speakerId !== undefined) request.speaker_id = this.options.speakerId;
+    this.child.stdin.write(`${JSON.stringify(request)}\n`);
     try {
       await finished;
       return {

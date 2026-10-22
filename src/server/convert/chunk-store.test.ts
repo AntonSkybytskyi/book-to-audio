@@ -8,8 +8,10 @@ const BOOK = "6f1c1b34-8d5b-4f64-9f0a-5a2d3f0c9d11";
 const META: ChunkMeta = {
   engine: "piper",
   voice: "en_US-lessac-medium",
+  speaker: null,
   sampleRate: 22_050,
   chunkCount: 5,
+  textVersion: 1,
 };
 
 describe("ChunkStore", () => {
@@ -52,6 +54,8 @@ describe("ChunkStore", () => {
   it.each([
     ["engine", { engine: "fake" }],
     ["voice", { voice: "en_US-ryan-high" }],
+    ["speaker", { speaker: "mykyta" }],
+    ["version of the text rules", { textVersion: 2 }],
     ["sample rate", { sampleRate: 16_000 }],
     ["number of chunks", { chunkCount: 6 }],
   ])("throws the chunks away when the %s differs", (_name, change) => {

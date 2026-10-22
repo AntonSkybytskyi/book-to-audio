@@ -1,3 +1,5 @@
+import { splitSentences } from "../text/sentences.js";
+
 /**
  * Splits chapter text (paragraphs separated by blank lines) into chunks of at
  * most `maxChars` characters. Sentences are kept whole where they fit, long
@@ -32,11 +34,6 @@ export function chunkText(text: string, maxChars: number, language = "en"): stri
   }
   push();
   return chunks;
-}
-
-export function splitSentences(text: string, language: string): string[] {
-  const segmenter = new Intl.Segmenter(language, { granularity: "sentence" });
-  return [...segmenter.segment(text)].map((s) => s.segment.trim()).filter(Boolean);
 }
 
 /** Splits on whitespace so each piece fits; a single word longer than the limit is cut. */

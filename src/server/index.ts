@@ -10,6 +10,7 @@ import { Storage } from "./books/storage.js";
 import { loadConfig } from "./config.js";
 import { ChunkStore } from "./convert/chunk-store.js";
 import { createChapterConverter } from "./convert/convert-chapter.js";
+import { createTextPreparer } from "./convert/text-preparer.js";
 import { PoolStateStore } from "./convert/pool-state.js";
 import { WorkerPool } from "./convert/pool.js";
 import { openDatabase } from "./db/database.js";
@@ -70,6 +71,7 @@ async function main() {
       encode: (pcm, outputPath, signal) => encodeWebm(pcm, outputPath, encoder, signal),
       join: (files, outputPath, signal, fallbackSeconds) =>
         concatWebm(files, outputPath, encoder, signal, fallbackSeconds),
+      prepareText: createTextPreparer(),
       logger,
     }),
     engine,

@@ -3,6 +3,8 @@
 export type BookStatus = "ready" | "converting" | "paused" | "done" | "done_with_errors";
 export type ChapterStatus = "pending" | "queued" | "generating" | "done" | "failed";
 export type Language = "en" | "uk" | "ru";
+/** Where a book's language came from; `unknown` means English is only a placeholder. */
+export type LanguageSource = "detected" | "metadata" | "unknown" | "chosen";
 
 export interface Chapter {
   position: number;
@@ -57,6 +59,10 @@ export interface BookSummary {
   title: string;
   author: string | null;
   language: string;
+  languageSource: LanguageSource;
+  languageConfidence: number;
+  /** The supported language the book's metadata names, if any. */
+  declaredLanguage: string | null;
   status: BookStatus;
   hasCover: boolean;
   createdAt: string;
@@ -88,6 +94,8 @@ export interface Settings {
   workers: number;
   maxWorkers: number;
   defaultWorkers: number;
+  /** The languages the language picker offers. */
+  shownLanguages: Language[];
 }
 
 export class ApiError extends Error {
@@ -149,6 +157,12 @@ export const saveWorkers = (workers: number) =>
     method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ workers }),
+  });
+export const saveShownLanguages = (shownLanguages: Language[]) =>
+  request<Settings>("/api/settings", {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ shownLanguages }),
   });
 export const getBooks = async (): Promise<Snapshot<BookSummary[]>> => {
   const { data, seq } = await requestSnapshot<{ books: BookSummary[] }>("/api/books");

@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { TtsError, type TtsEngine, type TtsSession, type Voice } from "./engine.js";
 import { PiperSession } from "./piper-session.js";
+import { compareVoiceFiles, defaultSpeaker } from "./voices.js";
 
 export interface PiperOptions {
   /** The `piper` executable. */
@@ -25,6 +26,8 @@ export interface PiperOptions {
 
 interface VoiceFile extends Voice {
   modelPath: string;
+  /** Piper's number for `speaker`, passed with every chunk. */
+  speakerId?: number;
 }
 
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -52,11 +55,12 @@ export class PiperEngine implements TtsEngine {
   }
 
   voices(): Voice[] {
-    return this.scan().map(({ id, language, name, sampleRate }) => ({
+    return this.scan().map(({ id, language, name, sampleRate, speaker }) => ({
       id,
       language,
       name,
       sampleRate,
+      ...(speaker === undefined ? {} : { speaker }),
     }));
   }
 
@@ -67,6 +71,7 @@ export class PiperEngine implements TtsEngine {
       bin: this.options.bin,
       modelPath: voice.modelPath,
       sampleRate: voice.sampleRate,
+      speakerId: voice.speakerId,
       scratchRoot: path.join(this.options.scratchDir, `piper-${process.pid}`),
       timeoutMs: this.options.timeoutMs,
       startupGraceMs: this.options.startupGraceMs,
@@ -108,7 +113,10 @@ export class PiperEngine implements TtsEngine {
       return this.cache;
     }
     const voices: VoiceFile[] = [];
-    for (const name of names.filter((n) => n.endsWith(".onnx")).toSorted()) {
+    const models = names.filter((n) => n.endsWith(".onnx"));
+    for (const name of models.toSorted((a, b) =>
+      compareVoiceFiles(a.slice(0, -5), b.slice(0, -5)),
+    )) {
       const voice = readVoice(path.join(this.options.voicesDir, name));
       if (voice) voices.push(voice);
     }
@@ -122,12 +130,20 @@ function readVoice(modelPath: string): VoiceFile | null {
     const config = JSON.parse(fs.readFileSync(`${modelPath}.json`, "utf8")) as {
       audio?: { sample_rate?: number };
       language?: { family?: string; code?: string };
+      num_speakers?: number;
+      speaker_id_map?: Record<string, number>;
     };
-    const id = path.basename(modelPath, ".onnx");
+    const model = path.basename(modelPath, ".onnx");
     const language = config.language?.family ?? config.language?.code?.split(/[_-]/)[0];
     const sampleRate = config.audio?.sample_rate;
     if (!language || !sampleRate) return null;
-    return { id, language: language.toLowerCase(), name: id, modelPath, sampleRate };
+    const base = { language: language.toLowerCase(), sampleRate, modelPath };
+    if ((config.num_speakers ?? 1) <= 1) return { ...base, id: model, name: model };
+    // A model with several speakers is one voice: the default speaker, named in the id.
+    const speaker = defaultSpeaker(model, config.speaker_id_map ?? {});
+    if (!speaker) return null;
+    const id = `${model}:${speaker.name}`;
+    return { ...base, id, name: id, speaker: speaker.name, speakerId: speaker.id };
   } catch {
     return null; // Missing or unreadable config: the voice is not usable.
   }

@@ -28,7 +28,7 @@ describe("migrations 3 and 4 (chapter pool)", () => {
        VALUES ('b', 1, 'C', 'text', 4, 1, 'done', 1)`,
     ).run();
 
-    expect(runMigrations(db, migrations)).toEqual([3, 4, 5, 6]);
+    expect(runMigrations(db, migrations)).toEqual([3, 4, 5, 6, 7]);
 
     expect(
       db.prepare("SELECT status, progress, chunk_count, chunks_done, claim FROM chapters").get(),
@@ -82,7 +82,7 @@ describe("migration 5 (book controls)", () => {
        VALUES ('b', 1, 'C', 'text', 4, 1, 'done', 'audio/b/01.webm')`,
     ).run();
 
-    expect(runMigrations(db, migrations)).toEqual([5, 6]);
+    expect(runMigrations(db, migrations)).toEqual([5, 6, 7]);
 
     expect(db.prepare("SELECT audio_version, regen_error, audio_path FROM chapters").get()).toEqual(
       { audio_version: 0, regen_error: null, audio_path: "audio/b/01.webm" },
@@ -123,5 +123,51 @@ describe("migration 6 (book outputs)", () => {
     expect(() =>
       db.prepare("INSERT INTO book_outputs (book_id, state) VALUES ('nope', 'queued')").run(),
     ).toThrow(/FOREIGN KEY/);
+  });
+});
+
+describe("migration 7 (book language detection)", () => {
+  let db: Database.Database;
+
+  beforeEach(() => {
+    db = new Database(":memory:");
+    runMigrations(
+      db,
+      migrations.filter((m) => m.id <= 6),
+    );
+    db.prepare(
+      "INSERT INTO books (id, title, source_path, language) VALUES ('old', 'T', 's', 'uk')",
+    ).run();
+    runMigrations(db, migrations);
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  it("keeps existing books, whose language the owner or the metadata set, as chosen", () => {
+    expect(
+      db
+        .prepare(
+          "SELECT language, language_source, language_confidence, declared_language FROM books",
+        )
+        .get(),
+    ).toEqual({
+      language: "uk",
+      language_source: "chosen",
+      language_confidence: 0,
+      declared_language: null,
+    });
+    // A book added afterwards without a verdict is unknown until detection says otherwise.
+    db.prepare("INSERT INTO books (id, title, source_path) VALUES ('new', 'T', 's')").run();
+    expect(db.prepare("SELECT language_source FROM books WHERE id = 'new'").pluck().get()).toBe(
+      "unknown",
+    );
+  });
+
+  it("allows only known origins and a confidence from 0 to 1", () => {
+    expect(() => db.prepare("UPDATE books SET language_source = 'guessed'").run()).toThrow(/CHECK/);
+    expect(() => db.prepare("UPDATE books SET language_confidence = 1.5").run()).toThrow(/CHECK/);
+    db.prepare("UPDATE books SET language_source = 'detected', language_confidence = 0.9").run();
   });
 });

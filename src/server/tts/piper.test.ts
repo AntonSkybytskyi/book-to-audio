@@ -1,114 +1,25 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { alive, usePiperFixture, VOICE } from "../testing/fake-piper.js";
 import { until } from "../testing/pool-harness.js";
 import { PiperEngine } from "./piper.js";
 import { wavToPcm } from "./piper-session.js";
 
-// A stand-in `piper` that speaks the `--json-input` protocol: one JSON line in, a
-// WAV file of one sample per character written, and its path printed when done.
-// Markers in the text make it misbehave: HANG never answers, CRASH dies, EMPTY writes no samples.
-const FAKE_PIPER = `#!/usr/bin/env node
-import fs from "node:fs";
-import readline from "node:readline";
-
-import { spawn } from "node:child_process";
-const log = process.env.FAKE_PIPER_LOG;
-// A wrapper script runs the real binary as a child; this one starts a child of its own.
-if (process.env.FAKE_PIPER_CHILD) {
-  const child = spawn("sleep", ["30"], { stdio: "ignore" });
-  fs.appendFileSync(process.env.FAKE_PIPER_CHILD, child.pid + "\\n");
-}
-if (log) fs.appendFileSync(log, JSON.stringify({ pid: process.pid, argv: process.argv.slice(2) }) + "\\n");
-
-const wav = (samples) => {
-  const header = Buffer.alloc(44);
-  header.write("RIFF", 0, "latin1");
-  header.writeUInt32LE(36 + samples.length, 4);
-  header.write("WAVEfmt ", 8, "latin1");
-  header.writeUInt32LE(16, 16);
-  header.writeUInt16LE(1, 20);
-  header.writeUInt16LE(1, 22);
-  header.writeUInt32LE(22050, 24);
-  header.writeUInt32LE(44100, 28);
-  header.writeUInt16LE(2, 32);
-  header.writeUInt16LE(16, 34);
-  header.write("data", 36, "latin1");
-  header.writeUInt32LE(samples.length, 40);
-  return Buffer.concat([header, samples]);
-};
-
-readline.createInterface({ input: process.stdin }).on("line", (line) => {
-  const { text, output_file } = JSON.parse(line);
-  if (text.includes("HANG")) return;
-  if (text.includes("CRASH")) {
-    process.stderr.write("OnnxRuntime: bad model\\n");
-    process.exit(1);
-  }
-  const samples = text.includes("EMPTY") ? Buffer.alloc(0) : Buffer.alloc(text.length * 2, 1);
-  fs.writeFileSync(output_file, wav(samples));
-  console.log(output_file);
-});
-`;
-
 const mode = (file: string) => fs.statSync(file).mode & 0o777;
 
-const alive = (pid: number) => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-};
-
 describe("PiperEngine", () => {
+  const fixture = usePiperFixture();
+  const { engineWith, starts } = fixture;
   let dir: string;
   let voicesDir: string;
-  let script: string;
-  let logFile: string;
   let scratchDir: string;
 
   beforeEach(() => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), "piper-test-"));
-    voicesDir = path.join(dir, "voices");
-    fs.mkdirSync(voicesDir);
-    const config = { audio: { sample_rate: 22050 }, language: { family: "en", code: "en_US" } };
-    fs.writeFileSync(path.join(voicesDir, "en_US-lessac-medium.onnx"), "model");
-    fs.writeFileSync(path.join(voicesDir, "en_US-lessac-medium.onnx.json"), JSON.stringify(config));
-    // Not usable: no config next to the model.
-    fs.writeFileSync(path.join(voicesDir, "broken.onnx"), "model");
-    fs.writeFileSync(path.join(voicesDir, "notes.txt"), "ignored");
-    script = path.join(dir, "fake-piper.mjs");
-    fs.writeFileSync(script, FAKE_PIPER, { mode: 0o755 });
-    logFile = path.join(dir, "starts.log");
-    scratchDir = path.join(dir, "scratch");
-    process.env.FAKE_PIPER_LOG = logFile;
+    dir = fixture.dir;
+    voicesDir = fixture.voicesDir;
+    scratchDir = fixture.scratchDir;
   });
-
-  afterEach(() => {
-    delete process.env.FAKE_PIPER_LOG;
-    for (const { pid } of starts()) {
-      if (alive(pid)) process.kill(pid, "SIGKILL");
-    }
-    fs.rmSync(dir, { recursive: true, force: true });
-  });
-
-  const starts = (): { pid: number; argv: string[] }[] =>
-    fs.existsSync(logFile)
-      ? fs
-          .readFileSync(logFile, "utf8")
-          .trim()
-          .split("\n")
-          .filter(Boolean)
-          .map((line) => JSON.parse(line) as { pid: number; argv: string[] })
-      : [];
-
-  // The first chunk gets 5 s extra for starting node; later chunks only `timeoutMs`.
-  const engineWith = (timeoutMs = 5000, bin = script) =>
-    new PiperEngine({ bin, voicesDir, timeoutMs, startupGraceMs: 5000, scratchDir });
-  const VOICE = "en_US-lessac-medium";
 
   it("lists the voices that have a model and a config", () => {
     expect(engineWith().voices()).toEqual([
@@ -355,7 +266,8 @@ describe("PiperEngine", () => {
     clock = 999;
     expect(engine.voices()).toHaveLength(1); // cached
     clock = 1000;
-    expect(engine.voices().map((v) => v.language)).toEqual(["de", "en"]);
+    // The default voice of English comes first, whatever the file names sort like.
+    expect(engine.voices().map((v) => v.language)).toEqual(["en", "de"]);
   });
 
   it("caches a missing voices directory too", () => {

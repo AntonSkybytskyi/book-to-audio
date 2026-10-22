@@ -35,7 +35,7 @@ export function pluralize(count: number, one: string, many = `${one}s`): string 
   return `${count} ${count === 1 ? one : many}`;
 }
 
-const LANGUAGE_NAMES: Record<string, string> = {
+export const LANGUAGE_NAMES: Record<string, string> = {
   en: "English",
   uk: "Ukrainian",
   ru: "Russian",

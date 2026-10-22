@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import { pipeline } from "node:stream/promises";
 import type { FastifyInstance } from "fastify";
-import { languageFromTag } from "../books/languages.js";
+import { chooseLanguage } from "../books/language-choice.js";
 import { countWords } from "../books/estimate.js";
 import type { BookRepository } from "../books/repository.js";
 import type { Storage } from "../books/storage.js";
@@ -77,12 +77,16 @@ export function registerUpload(
         if (coverPath) await fs.promises.writeFile(storage.resolve(coverPath), parsed.cover.bytes);
       }
 
+      const choice = chooseLanguage(parsed.chapters, parsed.language);
       repo.insert(
         {
           id,
           title: parsed.title,
           author: parsed.author,
-          language: languageFromTag(parsed.language),
+          language: choice.language,
+          languageSource: choice.source,
+          languageConfidence: choice.confidence,
+          declaredLanguage: choice.declared,
           coverMime: coverPath ? (parsed.cover?.mime ?? null) : null,
           coverPath,
           sourcePath,

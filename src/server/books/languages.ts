@@ -1,11 +1,17 @@
 export const LANGUAGES = ["en", "uk", "ru"] as const;
 export type Language = (typeof LANGUAGES)[number];
 
+export const LANGUAGE_NAMES: Record<Language, string> = {
+  en: "English",
+  uk: "Ukrainian",
+  ru: "Russian",
+};
+
 export const isLanguage = (value: string): value is Language =>
   (LANGUAGES as readonly string[]).includes(value);
 
-/** Maps a `dc:language` value such as `en-GB` to a supported language, defaulting to English. */
-export function languageFromTag(tag: string | null): Language {
+/** The supported language a `dc:language` value such as `en-GB` names, or null. */
+export function declaredLanguage(tag: string | null): Language | null {
   const primary = tag?.trim().toLowerCase().split(/[-_]/)[0] ?? "";
-  return isLanguage(primary) ? primary : "en";
+  return isLanguage(primary) ? primary : null;
 }

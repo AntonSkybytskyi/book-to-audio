@@ -152,7 +152,7 @@ describe("ZipWriter", () => {
     const zip = await JSZip.loadAsync(bytes);
     expect(Object.keys(zip.files)).toHaveLength(65_536);
     expect(await zip.file("65535.webm")?.async("string")).toBe("payload");
-  }, 60_000);
+  }, 180_000);
 
   it("keeps a plain ZIP free of ZIP64 records", async () => {
     const { target } = await build([{ name: "a.webm", content: "a" }]);

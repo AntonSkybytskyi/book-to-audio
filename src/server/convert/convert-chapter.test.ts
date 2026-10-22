@@ -1,95 +1,26 @@
 import fs from "node:fs";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ClaimedChapter } from "../books/queue.js";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DiskFullError } from "../errors.js";
-import { createTestContext, type TestContext } from "../testing/context.js";
-import { fakeEncode, fakeJoin } from "../testing/fake-codec.js";
+import { BOOK, task, TEXT, useChapterHarness } from "../testing/chapter-harness.js";
+import type { TestContext } from "../testing/context.js";
 import { chunkText } from "../tts/chunk.js";
+import { TEXT_PROCESSING_VERSION } from "../text/index.js";
 import { TtsError } from "../tts/engine.js";
 import { FakeEngine, type FakeEngineOptions } from "../tts/fake.js";
 import { ChunkStore, type ChunkStoreOptions } from "./chunk-store.js";
-import { createChapterConverter, type ChapterRun } from "./convert-chapter.js";
-import { SessionHolder } from "./sessions.js";
-
-const BOOK = "6f1c1b34-8d5b-4f64-9f0a-5a2d3f0c9d11";
-
-const TEXT = Array.from({ length: 60 }, (_, i) => `This is sentence number ${i}.`).join(" ");
-
-const task = (overrides: Partial<ClaimedChapter> = {}): ClaimedChapter => ({
-  id: 1,
-  bookId: BOOK,
-  position: 2,
-  title: "Two",
-  text: TEXT,
-  language: "en",
-  claim: 1,
-  chunkCount: 0,
-  chunksDone: 0,
-  ...overrides,
-});
+import { createChapterConverter } from "./convert-chapter.js";
 
 describe("createChapterConverter", () => {
+  const harness = useChapterHarness();
+  const { encode, join, retryDelays, warnings, converter, run, chunkFiles, chunkCount } = harness;
   let ctx: TestContext;
   let store: ChunkStore;
-  const holders: SessionHolder[] = [];
-  const retryDelays: number[] = [];
-  const warnings: { context: object; message: string }[] = [];
-  const encode = vi.fn<typeof fakeEncode>(fakeEncode);
-  const join = vi.fn<typeof fakeJoin>(fakeJoin);
 
   beforeEach(() => {
-    ctx = createTestContext();
-    ctx.storage.ensureAudioDir(BOOK); // as the convert route does
-    store = new ChunkStore(ctx.storage);
-    retryDelays.length = 0;
-    warnings.length = 0;
-    encode.mockClear();
-    join.mockClear();
+    ctx = harness.ctx;
+    store = harness.store;
   });
-
-  afterEach(async () => {
-    await Promise.all(holders.splice(0).map((holder) => holder.close()));
-    ctx.cleanup();
-  });
-
-  const converter = (engine: FakeEngine = ctx.engine, chunks: ChunkStore = store) =>
-    createChapterConverter({
-      engine,
-      storage: ctx.storage,
-      chunks,
-      encode,
-      join,
-      logger: { warn: (context, message) => warnings.push({ context, message }) },
-      retryDelaysMs: [1000, 5000, 15_000],
-      sleep: async (ms) => {
-        retryDelays.push(ms);
-      },
-    });
-
-  const run = (
-    engine: FakeEngine,
-    overrides: Partial<ChapterRun> = {},
-  ): ChapterRun & { saved: [number, number][] } => {
-    const sessions = new SessionHolder(engine);
-    holders.push(sessions);
-    const saved: [number, number][] = [];
-    return {
-      task: task(),
-      sessions,
-      signal: new AbortController().signal,
-      saveProgress: (done, total) => {
-        saved.push([done, total]);
-        return true;
-      },
-      ...overrides,
-      saved,
-    };
-  };
-
-  const partsOf = (position = 2) => ctx.storage.partsDir(BOOK, position);
-  const chunkFiles = () => fs.readdirSync(partsOf()).filter((n) => n.endsWith(".webm"));
-  const chunkCount = (maxChars = ctx.engine.maxInputChars) => chunkText(TEXT, maxChars).length;
 
   it("encodes every chunk as it is made, reports progress after each, and joins them into one file", async () => {
     const total = chunkCount();
@@ -166,6 +97,8 @@ describe("createChapterConverter", () => {
     store.open(BOOK, 2, {
       engine: "fake",
       voice: "fake-en",
+      speaker: null,
+      textVersion: TEXT_PROCESSING_VERSION,
       sampleRate: 22_050,
       chunkCount: total,
     });
@@ -184,6 +117,8 @@ describe("createChapterConverter", () => {
     store.open(BOOK, 2, {
       engine: "fake",
       voice: "fake-en",
+      speaker: null,
+      textVersion: TEXT_PROCESSING_VERSION,
       sampleRate: 22_050,
       chunkCount: total + 5,
     });
@@ -203,6 +138,8 @@ describe("createChapterConverter", () => {
     store.open(BOOK, 2, {
       engine: "fake",
       voice: "old-voice",
+      speaker: null,
+      textVersion: TEXT_PROCESSING_VERSION,
       sampleRate: 16_000,
       chunkCount: total,
     });

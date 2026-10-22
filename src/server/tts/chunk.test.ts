@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chunkText, splitSentences } from "./chunk.js";
+import { chunkText } from "./chunk.js";
 
 describe("chunkText", () => {
   it("packs whole sentences up to the limit", () => {
@@ -51,19 +51,5 @@ describe("chunkText", () => {
 
   it("rejects a limit below 1", () => {
     expect(() => chunkText("x", 0)).toThrow(RangeError);
-  });
-});
-
-describe("splitSentences", () => {
-  it("splits on sentence punctuation", () => {
-    expect(splitSentences("Hello there. How are you? Fine!", "en")).toEqual([
-      "Hello there.",
-      "How are you?",
-      "Fine!",
-    ]);
-  });
-
-  it("works for Ukrainian", () => {
-    expect(splitSentences("Привіт, світе. Як справи?", "uk")).toHaveLength(2);
   });
 });

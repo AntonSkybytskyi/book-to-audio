@@ -7,6 +7,8 @@ export interface Voice {
   name: string;
   /** Sample rate of the audio the voice produces, in Hz. */
   sampleRate: number;
+  /** The speaker of a multi-speaker model. It is part of `id`, so a change of speaker is a different voice. */
+  speaker?: string;
 }
 
 /** Raw 16-bit little-endian mono PCM. */

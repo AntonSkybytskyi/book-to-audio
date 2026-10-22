@@ -39,6 +39,17 @@
   color: var(--danger);
 }
 
+/* The language is a guess the owner should look at: marked, but not an error. */
+.check {
+  padding-left: 0.75rem;
+  border-left: 3px solid var(--accent);
+  color: var(--ink);
+}
+
+.origin {
+  font-weight: 600;
+}
+
 .chapters {
   margin-top: 2.5rem;
 }
