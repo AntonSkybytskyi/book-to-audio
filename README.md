@@ -79,7 +79,7 @@ pnpm check         # all of the above
 
 The same checks run in the container with `docker compose run --rm check`.
 
-CI (`.github/workflows/ci.yml`) runs lint, format check, typecheck, tests, build and a Docker image build (not pushed) on every pull request and every push to `main`, each as its own job.
+CI (`.github/workflows/ci.yml`) runs lint, format check, typecheck, tests, build and a Docker image build (not pushed) on every pull request and every push to `main`. The code checks are steps of one `check` job and all run even when one fails; the image build is the `docker` job.
 
 Making these checks required before a PR can be merged into `main` needs a public repo or GitHub Pro. Once that is in place:
 
@@ -88,7 +88,7 @@ gh api -X PUT repos/AntonSkybytskyi/book-to-audio/branches/main/protection --inp
 {
   "required_status_checks": {
     "strict": false,
-    "contexts": ["lint", "format", "typecheck", "test", "build", "docker"]
+    "contexts": ["check", "docker"]
   },
   "enforce_admins": true,
   "required_pull_request_reviews": null,
