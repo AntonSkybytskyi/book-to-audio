@@ -5,13 +5,15 @@ import { useEffect, useRef, useState, type DragEvent } from "react";
 import { ApiError, getConfig, uploadBook } from "../_lib/api";
 import { cx } from "../_lib/cx";
 import { UPLOAD_BUTTON_ID } from "../_lib/focus";
+import { Button } from "./Button";
 import { ProgressBar } from "./ProgressBar";
-import styles from "./UploadZone.module.css";
 
 type State =
   | { phase: "idle" }
   | { phase: "uploading"; name: string; progress: number }
   | { phase: "error"; message: string };
+
+const HINT = "mt-1 text-ink-muted";
 
 /** `limitMb` comes from the server; until it is known only the server checks the size. */
 function checkFile(file: File, limitMb: number | null): string | null {
@@ -74,7 +76,10 @@ export function UploadZone() {
 
   return (
     <section
-      className={cx(styles.zone, dragging && styles.dragging)}
+      className={cx(
+        "mt-8 rounded-base border-[1.5px] border-dashed px-5 py-6 transition-[border-color,background-color] duration-150 ease-[ease]",
+        dragging ? "border-accent bg-accent-soft" : "border-rule bg-paper-raised",
+      )}
       aria-labelledby="upload-title"
       onDragOver={(event) => {
         event.preventDefault();
@@ -83,29 +88,24 @@ export function UploadZone() {
       onDragLeave={() => setDragging(false)}
       onDrop={onDrop}
     >
-      <h2 id="upload-title" className={styles.title}>
+      <h2 id="upload-title" className="font-serif text-[1.25rem] font-semibold">
         {uploading ? "Uploading…" : "Add a book"}
       </h2>
 
       {uploading ? (
-        <div className={styles.progress}>
-          <p className={styles.fileName}>{state.name}</p>
+        <div className="mt-3 grid gap-2">
+          <p className="font-serif wrap-anywhere">{state.name}</p>
           <ProgressBar value={state.progress} label={`Uploading ${state.name}`} />
-          <p className={styles.hint}>
+          <p className={HINT}>
             {state.progress >= 1 ? "Reading the book…" : `${Math.round(state.progress * 100)}%`}
           </p>
         </div>
       ) : (
         <>
-          <p className={styles.hint}>Drop an EPUB here, or choose one from your computer.</p>
-          <button
-            id={UPLOAD_BUTTON_ID}
-            type="button"
-            className={styles.choose}
-            onClick={() => input.current?.click()}
-          >
+          <p className={HINT}>Drop an EPUB here, or choose one from your computer.</p>
+          <Button id={UPLOAD_BUTTON_ID} className="mt-4" onClick={() => input.current?.click()}>
             Choose an EPUB
-          </button>
+          </Button>
         </>
       )}
 
@@ -113,7 +113,7 @@ export function UploadZone() {
         ref={input}
         type="file"
         accept=".epub,application/epub+zip"
-        className={styles.hiddenInput}
+        className="hidden"
         tabIndex={-1}
         aria-label="EPUB file"
         onChange={(event) => {
@@ -122,7 +122,7 @@ export function UploadZone() {
         }}
       />
 
-      <p className={styles.error} role="alert">
+      <p className="mt-3 text-danger empty:mt-0" role="alert">
         {state.phase === "error" ? state.message : ""}
       </p>
     </section>

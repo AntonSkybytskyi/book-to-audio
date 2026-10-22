@@ -24,9 +24,11 @@ import { useBenchmark } from "../_lib/use-benchmark";
 import { useBook } from "../_lib/use-book";
 import { BookHeader } from "./BookHeader";
 import { BookDeleted } from "./BookDeleted";
+import { Button } from "./Button";
 import { LoadState } from "./LoadState";
-import styles from "./PreviewView.module.css";
-import shared from "./shared.module.css";
+import { Page } from "./Page";
+
+const NOTE = "mt-2 text-[0.9rem] text-ink-muted";
 
 export function PreviewView({ id }: { id: string }) {
   const router = useRouter();
@@ -117,17 +119,20 @@ export function PreviewView({ id }: { id: string }) {
   };
 
   return (
-    <div className={shared.page}>
+    <Page>
       <BookHeader id={book.id} title={book.title} author={book.author} hasCover={book.hasCover} />
 
-      <section className={styles.settings} aria-label="Conversion settings">
-        <div className={styles.field}>
-          <label htmlFor="language" className={styles.label}>
+      <section
+        className="mt-8 rounded-base border border-rule bg-paper-raised px-5 py-4"
+        aria-label="Conversion settings"
+      >
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <label htmlFor="language" className="font-semibold">
             Language of the book
           </label>
           <select
             id="language"
-            className={styles.select}
+            className="min-h-10 rounded-base border border-rule bg-paper px-3 py-1"
             value={needsChoice ? "" : chosen}
             disabled={busy}
             aria-describedby="language-note"
@@ -148,12 +153,17 @@ export function PreviewView({ id }: { id: string }) {
         <p
           id="language-note"
           className={
-            hasVoice ? (note.tone === "check" ? styles.check : styles.note) : styles.warning
+            hasVoice
+              ? note.tone === "check"
+                ? // The language is a guess the owner should look at: marked, but not an error.
+                  "border-l-[3px] border-l-accent pl-3 text-ink"
+                : NOTE
+              : "mt-2 text-[0.9rem] text-danger"
           }
         >
           {hasVoice ? (
             <>
-              {note.headline && <strong className={styles.origin}>{note.headline}. </strong>}
+              {note.headline && <strong className="font-semibold">{note.headline}. </strong>}
               {note.text}
             </>
           ) : (
@@ -162,17 +172,21 @@ export function PreviewView({ id }: { id: string }) {
         </p>
       </section>
 
-      <section aria-labelledby="chapters-title" className={styles.chapters}>
-        <div className={styles.chaptersHead}>
-          <h2 id="chapters-title" className={styles.chaptersTitle}>
+      <section aria-labelledby="chapters-title" className="mt-10">
+        <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <h2 id="chapters-title" className="font-serif text-[1.3rem]">
             {pluralize(book.chapterCount, "chapter")}
           </h2>
-          <p className={styles.total}>
+          <p className="text-[0.9rem] text-ink-muted">
             {formatWords(totalWords)}
             {estimateText && ` · ${estimateText.audio}`}
           </p>
         </div>
-        <div className={styles.estimate} role="status" aria-live="polite">
+        <div
+          className="mb-[0.9rem] grid gap-1 text-[0.9rem] text-ink-muted empty:hidden"
+          role="status"
+          aria-live="polite"
+        >
           {(estimating || measuring) && <p>Working out how long it will take…</p>}
           {estimateText && (
             <>
@@ -193,14 +207,17 @@ export function PreviewView({ id }: { id: string }) {
             </>
           )}
         </div>
-        <ol className={styles.list}>
+        <ol className="border-t border-rule">
           {book.chapters.map((chapter, index) => (
-            <li key={chapter.position} className={styles.row}>
-              <span className={styles.number} aria-hidden="true">
+            <li
+              key={chapter.position}
+              className="grid grid-cols-[2rem_1fr_auto] items-baseline gap-x-3 gap-y-1 border-b border-rule py-[0.7rem] max-sm:grid-cols-[1.5rem_1fr]"
+            >
+              <span className="text-right text-ink-muted tabular-nums" aria-hidden="true">
                 {chapter.position}
               </span>
-              <span className={styles.chapterTitle}>{chapter.title}</span>
-              <span className={styles.length}>
+              <span className="font-serif text-[1.05rem] wrap-anywhere">{chapter.title}</span>
+              <span className="text-right text-[0.85rem] text-ink-muted max-sm:col-[2] max-sm:text-left">
                 {[
                   formatWords(chapter.wordCount),
                   hasVoice ? chapterLength(shownChapterSeconds(onShow, index)) : null,
@@ -213,26 +230,24 @@ export function PreviewView({ id }: { id: string }) {
         </ol>
       </section>
 
-      <div className={styles.actions}>
-        <button
-          type="button"
-          className={shared.button}
+      <div className="sticky bottom-0 mt-8 flex flex-wrap items-center gap-x-4 gap-y-3 bg-[linear-gradient(to_top,var(--color-paper)_70%,transparent)] py-4">
+        <Button
           disabled={busy || !hasVoice || needsChoice}
           aria-describedby={needsChoice ? "language-required" : undefined}
           onClick={convert}
         >
           {busy ? "Starting…" : "Convert"}
-        </button>
+        </Button>
         {needsChoice && (
-          <p id="language-required" className={styles.note}>
+          <p id="language-required" className={NOTE}>
             Choose the language of the book first.
           </p>
         )}
-        <p className={shared.error} role="alert">
+        <p className="text-danger" role="alert">
           {failure}
         </p>
       </div>
-    </div>
+    </Page>
   );
 }
 

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
 import { audioUrl, regenerateChapter } from "../_lib/api";
@@ -13,14 +12,14 @@ import { useBook } from "../_lib/use-book";
 import { BookControls } from "./BookControls";
 import { BookDeleted } from "./BookDeleted";
 import { BookHeader } from "./BookHeader";
+import { Button } from "./Button";
 import { ChapterRow } from "./ChapterRow";
 import { DeleteBookDialog } from "./DeleteBookDialog";
 import { Downloads } from "./Downloads";
 import { LoadState } from "./LoadState";
+import { Page } from "./Page";
 import { ProgressBar } from "./ProgressBar";
 import { RegenerateChapterDialog } from "./RegenerateChapterDialog";
-import styles from "./BookView.module.css";
-import shared from "./shared.module.css";
 
 export function BookView({ id }: { id: string }) {
   const router = useRouter();
@@ -83,7 +82,7 @@ export function BookView({ id }: { id: string }) {
   };
 
   return (
-    <div className={shared.page}>
+    <Page>
       <BookHeader
         id={book.id}
         title={book.title}
@@ -92,31 +91,35 @@ export function BookView({ id }: { id: string }) {
         language={book.language}
       />
 
-      <section className={styles.progress} aria-label="Conversion progress">
+      <section className="mt-8 mb-6 grid gap-[0.6rem]" aria-label="Conversion progress">
         {book.status !== "ready" && (
           <ProgressBar value={overallProgress(book)} label="Overall conversion progress" />
         )}
-        <p className={styles.summary} role="status" aria-live="polite">
+        <p className="tabular-nums" role="status" aria-live="polite">
           {bookSummary(book, pool?.state === "paused")}
         </p>
-        {timeLeft && <p className={styles.timeLeft}>{timeLeft}</p>}
+        {timeLeft && <p className="text-[0.95rem] text-ink-muted tabular-nums">{timeLeft}</p>}
         {book.status === "ready" && (
-          <Link href={`/books/${book.id}/preview`} className={`${shared.button} ${styles.cta}`}>
+          <Button href={`/books/${book.id}/preview`} className="justify-self-start">
             Review and convert
-          </Link>
+          </Button>
         )}
-        {stale && <p className={styles.stale}>Lost contact with the server. Trying again…</p>}
+        {stale && (
+          <p className="text-[0.9rem] text-ink-muted">
+            Lost contact with the server. Trying again…
+          </p>
+        )}
       </section>
 
       <BookControls book={book} onChanged={refresh} onDelete={() => setDeleting(true)} />
 
       <Downloads book={book} onChanged={refresh} />
 
-      <p className={shared.error} role="alert">
+      <p className="text-danger" role="alert">
         {playbackError}
       </p>
 
-      <ol className={styles.chapters} aria-label="Chapters">
+      <ol className="border-t border-rule" aria-label="Chapters">
         {book.chapters.map((chapter) => (
           <ChapterRow
             key={chapter.position}
@@ -169,6 +172,6 @@ export function BookView({ id }: { id: string }) {
           }
         }}
       />
-    </div>
+    </Page>
   );
 }
