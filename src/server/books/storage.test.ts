@@ -13,6 +13,12 @@ describe("Storage", () => {
     expect(storage.audioRelPath(id, 120)).toBe(`audio/${id}/120.webm`);
   });
 
+  it("keeps the downloads of a book in the outputs area, which delete and the sweep cover", () => {
+    expect(storage.outputFile(id, "m4b")).toBe(path.join("/data", "outputs", id, "book.m4b"));
+    expect(storage.outputFile(id, "zip")).toBe(path.join("/data", "outputs", id, "book.zip"));
+    expect(storage.bookAreas).toContain("outputs");
+  });
+
   it("has no cover path for unsupported image types", () => {
     expect(storage.coverRelPath(id, "image/svg+xml")).toBeNull();
   });

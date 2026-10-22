@@ -9,6 +9,8 @@ export interface RunOptions {
   signal?: AbortSignal;
   /** Output beyond this is an error, so a runaway process cannot fill memory. */
   maxStdoutBytes?: number;
+  /** Gets stdout as it arrives instead of it being collected (`RunResult.stdout` is then empty): for progress reports. */
+  onStdout?: (chunk: Buffer) => void;
 }
 
 export interface RunResult {
@@ -72,6 +74,10 @@ export const runProcess: ProcessRunner = (command, args, options) =>
       reject(error);
     });
     child.stdout.on("data", (chunk: Buffer) => {
+      if (options.onStdout) {
+        options.onStdout(chunk);
+        return;
+      }
       stdoutBytes += chunk.length;
       if (stdoutBytes > maxStdout) {
         overflow = true;

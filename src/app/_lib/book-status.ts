@@ -14,7 +14,7 @@ export function libraryStatus(book: BookSummary): string {
     case "paused":
       return `Paused · ${ready(book)}`;
     case "done":
-      return `Ready to listen · ${ready(book)} · ${formatClock(book.durationSeconds)}`;
+      return `Ready to listen · ${ready(book)} · ${formatClock(book.durationSeconds)}${book.outputs.available ? " · Ready to download" : ""}`;
     case "done_with_errors":
       return `${pluralize(book.failedCount, "chapter")} failed · ${ready(book)}`;
   }
@@ -56,10 +56,17 @@ export function overallProgress(book: Book): number {
   return sum / book.chapters.length;
 }
 
+/** A finished book whose downloads are not there yet and have not failed: they are about to change. */
+const downloadsPending = (book: BookSummary): boolean =>
+  book.status === "done" && !book.outputs.available && book.outputs.state !== "failed";
+
 /** Keep refreshing a book while work is going on or about to. */
 export const bookIsBusy = (book: Book): boolean =>
   book.status === "converting" ||
-  (book.status === "paused" && book.chapters.some((chapter) => chapter.status === "generating"));
+  (book.status === "paused" && book.chapters.some((chapter) => chapter.status === "generating")) ||
+  downloadsPending(book);
 
 export const libraryIsBusy = (books: BookSummary[]): boolean =>
-  books.some((book) => book.status === "converting" || book.status === "paused");
+  books.some(
+    (book) => book.status === "converting" || book.status === "paused" || downloadsPending(book),
+  );

@@ -28,7 +28,7 @@ describe("migrations 3 and 4 (chapter pool)", () => {
        VALUES ('b', 1, 'C', 'text', 4, 1, 'done', 1)`,
     ).run();
 
-    expect(runMigrations(db, migrations)).toEqual([3, 4, 5]);
+    expect(runMigrations(db, migrations)).toEqual([3, 4, 5, 6]);
 
     expect(
       db.prepare("SELECT status, progress, chunk_count, chunks_done, claim FROM chapters").get(),
@@ -82,12 +82,46 @@ describe("migration 5 (book controls)", () => {
        VALUES ('b', 1, 'C', 'text', 4, 1, 'done', 'audio/b/01.webm')`,
     ).run();
 
-    expect(runMigrations(db, migrations)).toEqual([5]);
+    expect(runMigrations(db, migrations)).toEqual([5, 6]);
 
     expect(db.prepare("SELECT audio_version, regen_error, audio_path FROM chapters").get()).toEqual(
       { audio_version: 0, regen_error: null, audio_path: "audio/b/01.webm" },
     );
     expect(db.prepare("SELECT audio_generation FROM books").pluck().get()).toBe(0);
     db.close();
+  });
+});
+
+describe("migration 6 (book outputs)", () => {
+  let db: Database.Database;
+
+  beforeEach(() => {
+    db = new Database(":memory:");
+    db.pragma("foreign_keys = ON");
+    runMigrations(db, migrations);
+    db.prepare("INSERT INTO books (id, title, source_path) VALUES ('b', 'T', 's')").run();
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  it("holds one row per book, in a known state, and goes away with the book", () => {
+    db.prepare("INSERT INTO book_outputs (book_id, state) VALUES ('b', 'queued')").run();
+
+    expect(() =>
+      db.prepare("INSERT INTO book_outputs (book_id, state) VALUES ('b', 'ready')").run(),
+    ).toThrow(/UNIQUE/);
+    expect(() => db.prepare("UPDATE book_outputs SET state = 'none'").run()).toThrow(/CHECK/);
+    expect(() => db.prepare("UPDATE book_outputs SET progress = 2").run()).toThrow(/CHECK/);
+
+    db.prepare("DELETE FROM books WHERE id = 'b'").run();
+    expect(db.prepare("SELECT count(*) FROM book_outputs").pluck().get()).toBe(0);
+  });
+
+  it("does not take a row for a book that does not exist", () => {
+    expect(() =>
+      db.prepare("INSERT INTO book_outputs (book_id, state) VALUES ('nope', 'queued')").run(),
+    ).toThrow(/FOREIGN KEY/);
   });
 });

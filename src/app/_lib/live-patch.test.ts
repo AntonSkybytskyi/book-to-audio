@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Book, BookSummary, Chapter } from "./api";
+import { NO_OUTPUTS, type Book, type BookSummary, type Chapter } from "./api";
 import type { AppEvent } from "./events";
 import { isFinishing } from "./chapter";
 import { patchBook, patchLibrary } from "./live-patch";
@@ -36,6 +36,7 @@ const book = (overrides: Partial<Book> = {}): Book => ({
   wordCount: 60,
   estimatedMinutes: 3,
   durationSeconds: 0,
+  outputs: NO_OUTPUTS,
   chapters: [chapter(1), chapter(2), chapter(3)],
   availableLanguages: ["en"],
   ...overrides,
@@ -72,6 +73,7 @@ const summary = (id: string): BookSummary => ({
   wordCount: 80,
   estimatedMinutes: 4,
   durationSeconds: 0,
+  outputs: NO_OUTPUTS,
 });
 describe("patchBook", () => {
   it("updates the chapter that the event is about and nothing else", () => {
@@ -291,5 +293,53 @@ describe("patchLibrary", () => {
     const books = [summary("b1")];
 
     expect(patchLibrary(books, chapterEvent())).toBe(books);
+  });
+});
+
+const outputs = (overrides: Partial<Extract<AppEvent, { type: "outputs" }>> = {}): AppEvent => ({
+  type: "outputs",
+  bookId: "b1",
+  state: "building",
+  available: false,
+  updating: true,
+  progress: 0.5,
+  error: null,
+  m4bBytes: null,
+  zipBytes: null,
+  ...overrides,
+});
+
+describe("outputs events", () => {
+  it("replaces the downloads state of the book it is about", () => {
+    const after = patchBook(book({ status: "done" }), outputs());
+
+    expect(after?.outputs).toEqual({
+      state: "building",
+      available: false,
+      updating: true,
+      progress: 0.5,
+      error: null,
+      m4bBytes: null,
+      zipBytes: null,
+    });
+    expect(after?.status).toBe("done");
+  });
+
+  it("leaves other books alone", () => {
+    const before = book();
+
+    expect(patchBook(before, outputs({ bookId: "other" }))).toBe(before);
+  });
+
+  it("updates the library entry, and only that one", () => {
+    const books = [summary("b1"), summary("b2")];
+
+    const after = patchLibrary(
+      books,
+      outputs({ state: "ready", available: true, m4bBytes: 1, zipBytes: 2 }),
+    );
+
+    expect(after?.[0]?.outputs.available).toBe(true);
+    expect(after?.[1]).toBe(books[1]);
   });
 });

@@ -61,6 +61,7 @@ describe("deleting a book with a pool running real chapter conversions", () => {
       storage,
       bus: h.ctx.bus,
       pool,
+      outputs: h.ctx.outputs,
     });
     return { id, controls, storage };
   };

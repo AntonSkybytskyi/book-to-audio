@@ -25,6 +25,33 @@ export interface Chapter {
   regenError: string | null;
 }
 
+/** The M4B and ZIP of a book. Mirrors `OutputsView` in src/server/outputs/view.ts. */
+export interface Outputs {
+  /** `none` until a build was ever wanted. */
+  state: "none" | "queued" | "building" | "ready" | "failed";
+  /** The files can be downloaded now: built from the current audio, and the book is done. */
+  available: boolean;
+  /** Files built from older audio exist, and new ones are on their way. */
+  updating: boolean;
+  /** 0 to 1, while building. */
+  progress: number;
+  error: string | null;
+  /** Only while `available`. */
+  m4bBytes: number | null;
+  zipBytes: number | null;
+}
+
+/** What a book that was never built looks like. */
+export const NO_OUTPUTS: Outputs = {
+  state: "none",
+  available: false,
+  updating: false,
+  progress: 0,
+  error: null,
+  m4bBytes: null,
+  zipBytes: null,
+};
+
 export interface BookSummary {
   id: string;
   title: string;
@@ -39,6 +66,7 @@ export interface BookSummary {
   wordCount: number;
   estimatedMinutes: number;
   durationSeconds: number;
+  outputs: Outputs;
 }
 
 export interface Book extends BookSummary {
@@ -109,6 +137,9 @@ export const coverUrl = (id: string) => `/api/books/${id}/cover`;
 export const audioUrl = (id: string, position: number, version: number) =>
   `/api/books/${id}/chapters/${position}/audio?v=${version}`;
 
+export type DownloadKind = "m4b" | "zip";
+export const downloadUrl = (id: string, kind: DownloadKind) => `/api/books/${id}/downloads/${kind}`;
+
 export const getConfig = () => request<{ maxUploadMb: number }>("/api/config");
 export const getPool = () => requestSnapshot<PoolStatus>("/api/pool");
 export const resumePool = () => requestSnapshot<PoolStatus>("/api/pool/resume", { method: "POST" });
@@ -139,6 +170,8 @@ export const resumeBook = (id: string) => post(`/api/books/${id}/resume`);
 export const regenerateBook = (id: string) => post(`/api/books/${id}/regenerate`);
 export const regenerateChapter = (id: string, position: number) =>
   post(`/api/books/${id}/chapters/${position}/regenerate`);
+
+export const rebuildOutputs = (id: string) => post(`/api/books/${id}/outputs/rebuild`);
 
 /** A book that is already gone counts as deleted. */
 export async function deleteBook(id: string): Promise<void> {

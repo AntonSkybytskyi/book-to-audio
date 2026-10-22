@@ -1,4 +1,5 @@
 import type Database from "better-sqlite3";
+import type { OutputRow, OutputState } from "../outputs/view.js";
 
 export type BookStatus = "ready" | "converting" | "paused" | "done" | "done_with_errors";
 export type ChapterStatus = "pending" | "queued" | "generating" | "done" | "failed";
@@ -23,7 +24,13 @@ export interface BookTotals {
   durationSeconds: number;
 }
 
-export type BookWithTotals = Book & BookTotals;
+export type BookWithTotals = Book &
+  BookTotals & {
+    /** Counts the chapter audio writes of the book (see migration 5). */
+    audioGeneration: number;
+    /** The state of the M4B and ZIP, null when none was ever wanted. */
+    outputs: OutputRow | null;
+  };
 
 export interface Chapter {
   position: number;
@@ -69,6 +76,7 @@ interface BookRow {
   cover_path: string | null;
   source_path: string;
   created_at: string;
+  audio_generation: number;
 }
 
 interface TotalsRow extends BookRow {
@@ -77,6 +85,13 @@ interface TotalsRow extends BookRow {
   failed_count: number;
   word_count: number;
   duration_seconds: number;
+  o_state: OutputState | null;
+  o_progress: number | null;
+  o_error: string | null;
+  o_built_generation: number | null;
+  o_attempt_generation: number | null;
+  o_m4b_bytes: number | null;
+  o_zip_bytes: number | null;
 }
 
 interface ChapterRow {
@@ -129,8 +144,13 @@ const TOTALS_SQL = `
     coalesce(sum(c.status = 'done'), 0) AS done_count,
     coalesce(sum(c.status = 'failed'), 0) AS failed_count,
     coalesce(sum(c.word_count), 0) AS word_count,
-    coalesce(sum(c.duration_seconds), 0) AS duration_seconds
-  FROM books b LEFT JOIN chapters c ON c.book_id = b.id
+    coalesce(sum(c.duration_seconds), 0) AS duration_seconds,
+    o.state AS o_state, o.progress AS o_progress, o.error AS o_error,
+    o.built_generation AS o_built_generation, o.attempt_generation AS o_attempt_generation,
+    o.m4b_bytes AS o_m4b_bytes, o.zip_bytes AS o_zip_bytes
+  FROM books b
+    LEFT JOIN chapters c ON c.book_id = b.id
+    LEFT JOIN book_outputs o ON o.book_id = b.id
 `;
 
 const toTotals = (row: TotalsRow): BookWithTotals => ({
@@ -140,6 +160,19 @@ const toTotals = (row: TotalsRow): BookWithTotals => ({
   failedCount: row.failed_count,
   wordCount: row.word_count,
   durationSeconds: row.duration_seconds,
+  audioGeneration: row.audio_generation,
+  outputs:
+    row.o_state === null
+      ? null
+      : {
+          state: row.o_state,
+          progress: row.o_progress ?? 0,
+          error: row.o_error,
+          builtGeneration: row.o_built_generation,
+          attemptGeneration: row.o_attempt_generation,
+          m4bBytes: row.o_m4b_bytes,
+          zipBytes: row.o_zip_bytes,
+        },
 });
 
 const NOW = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";

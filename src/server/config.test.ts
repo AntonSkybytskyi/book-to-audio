@@ -48,7 +48,9 @@ describe("loadConfig", () => {
       piperBin: "piper",
       piperVoicesDir: "/opt/piper-voices",
       ffmpegBin: "ffmpeg",
+      ffprobeBin: "ffprobe",
       opusBitrate: "32k",
+      m4bBitrate: "64k",
       fakeTtsDelayMs: 0,
       allowedHosts: [],
       workers: undefined,
@@ -99,7 +101,9 @@ describe("loadConfig", () => {
       PIPER_BIN: "/opt/piper/piper",
       PIPER_VOICES_DIR: "/voices",
       FFMPEG_BIN: "/usr/bin/ffmpeg",
+      FFPROBE_BIN: "/usr/bin/ffprobe",
       OPUS_BITRATE: "48k",
+      M4B_BITRATE: "96k",
       FAKE_TTS_DELAY_MS: "250",
       ALLOWED_HOSTS: "Books.lan, nas.local,,",
     });
@@ -110,7 +114,9 @@ describe("loadConfig", () => {
       piperBin: "/opt/piper/piper",
       piperVoicesDir: "/voices",
       ffmpegBin: "/usr/bin/ffmpeg",
+      ffprobeBin: "/usr/bin/ffprobe",
       opusBitrate: "48k",
+      m4bBitrate: "96k",
       fakeTtsDelayMs: 250,
       allowedHosts: ["books.lan", "nas.local"],
     });
@@ -128,6 +134,7 @@ describe("loadConfig", () => {
     { MAX_UPLOAD_MB: "lots" },
     { TTS_ENGINE: "espeak" },
     { OPUS_BITRATE: "32" },
+    { M4B_BITRATE: "64" },
     { FAKE_TTS_DELAY_MS: "-1" },
   ])("rejects %j", (env) => {
     expect(() => loadConfig(env)).toThrow(/Invalid/);

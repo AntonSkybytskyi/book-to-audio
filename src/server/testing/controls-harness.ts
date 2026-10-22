@@ -19,6 +19,7 @@ export function controlsFor(h: PoolHarness, extra: Partial<BookControlsDeps> = {
     storage: h.ctx.storage,
     bus: h.ctx.bus,
     pool: h.pool,
+    outputs: h.ctx.outputs,
     ...extra,
   });
 }

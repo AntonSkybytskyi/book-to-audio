@@ -14,8 +14,12 @@ export interface Config {
   /** Directory with Piper voice models (`.onnx` and `.onnx.json`). */
   piperVoicesDir: string;
   ffmpegBin: string;
+  /** The `ffprobe` executable, used to measure chapter files before the M4B is built. */
+  ffprobeBin: string;
   /** Opus bitrate of chapter audio, for example `32k`. */
   opusBitrate: string;
+  /** AAC bitrate of the M4B audiobook, for example `64k`. */
+  m4bBitrate: string;
   /** Host names besides localhost that the app answers to. */
   allowedHosts: string[];
   /** Artificial delay per chunk for the fake engine, to see progress in the UI. */
@@ -44,7 +48,9 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     piperBin: env.PIPER_BIN || "piper",
     piperVoicesDir: env.PIPER_VOICES_DIR || "/opt/piper-voices",
     ffmpegBin: env.FFMPEG_BIN || "ffmpeg",
-    opusBitrate: parseBitrate(env.OPUS_BITRATE),
+    ffprobeBin: env.FFPROBE_BIN || "ffprobe",
+    opusBitrate: parseBitrate("OPUS_BITRATE", env.OPUS_BITRATE, "32k"),
+    m4bBitrate: parseBitrate("M4B_BITRATE", env.M4B_BITRATE, "64k"),
     allowedHosts: (env.ALLOWED_HOSTS ?? "")
       .split(",")
       .map((host) => host.trim().toLowerCase())
@@ -88,10 +94,10 @@ function parseEngine(value: string | undefined): Config["ttsEngine"] {
   throw new Error(`Invalid TTS_ENGINE "${value}": expected "piper" or "fake"`);
 }
 
-function parseBitrate(value: string | undefined): string {
-  if (value === undefined || value === "") return "32k";
+function parseBitrate(name: string, value: string | undefined, fallback: string): string {
+  if (value === undefined || value === "") return fallback;
   if (!/^\d{1,3}k$/.test(value)) {
-    throw new Error(`Invalid OPUS_BITRATE "${value}": expected a value like "32k"`);
+    throw new Error(`Invalid ${name} "${value}": expected a value like "${fallback}"`);
   }
   return value;
 }

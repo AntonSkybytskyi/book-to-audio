@@ -116,4 +116,31 @@ export const migrations: Migration[] = [
       ALTER TABLE books ADD COLUMN audio_generation INTEGER NOT NULL DEFAULT 0;
     `,
   },
+  {
+    id: 6,
+    name: "book_outputs",
+    sql: `
+      -- The M4B and ZIP of a book, one row per book once a build was ever wanted (no row: never).
+      -- The files are outputs/<book id>/book.m4b and book.zip; this row says what state they are in.
+      CREATE TABLE book_outputs (
+        book_id TEXT PRIMARY KEY REFERENCES books (id) ON DELETE CASCADE,
+        -- queued and building are re-queued at startup; failed keeps its message in error.
+        state TEXT NOT NULL CHECK (state IN ('queued', 'building', 'ready', 'failed')),
+        progress REAL NOT NULL DEFAULT 0 CHECK (progress >= 0 AND progress <= 1),
+        error TEXT,
+        -- books.audio_generation the files on disk were built from (null: no files). The files
+        -- are current only while it equals the book's generation, state is ready and the book is done.
+        built_generation INTEGER,
+        -- The generation the latest build started from. A failed build is only tried again by itself
+        -- once the audio has changed since; until then the owner retries it.
+        attempt_generation INTEGER,
+        m4b_bytes INTEGER,
+        zip_bytes INTEGER,
+        queued_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+        updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+      ) STRICT;
+
+      CREATE INDEX book_outputs_state ON book_outputs (state, queued_at);
+    `,
+  },
 ];

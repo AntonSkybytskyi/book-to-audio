@@ -17,6 +17,16 @@ export function formatMinutes(minutes: number): string {
   return m === 0 ? `${h} h` : `${h} h ${m} min`;
 }
 
+/** File size for people: `980 KB`, `74 MB`, `1.2 GB`. */
+export function formatBytes(bytes: number): string {
+  const kb = bytes / 1024;
+  if (kb < 1000) return `${Math.max(1, Math.round(kb))} KB`;
+  const mb = kb / 1024;
+  if (mb < 1000) return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
+  const gb = mb / 1024;
+  return `${gb < 10 ? gb.toFixed(1) : Math.round(gb)} GB`;
+}
+
 export function formatWords(words: number): string {
   return `${words.toLocaleString("en-US")} ${words === 1 ? "word" : "words"}`;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useSyncExternalStore } from "react";
-import type { BookStatus, ChapterStatus, PoolStatus } from "./api";
+import type { BookStatus, ChapterStatus, Outputs, PoolStatus } from "./api";
 
 // Mirrors the payloads in src/server/events/bus.ts.
 export interface ChapterEvent {
@@ -43,7 +43,19 @@ export interface BookDeletedEvent {
   bookId: string;
 }
 
-export type AppEvent = ChapterEvent | BookEvent | PoolEvent | BookAddedEvent | BookDeletedEvent;
+/** The state of a book's downloads changed. */
+export interface OutputsEvent extends Outputs {
+  type: "outputs";
+  bookId: string;
+}
+
+export type AppEvent =
+  | ChapterEvent
+  | BookEvent
+  | PoolEvent
+  | BookAddedEvent
+  | BookDeletedEvent
+  | OutputsEvent;
 
 /** `live`: the stream is open and pages need not poll. `down`: poll until it comes back. */
 export type LiveStatus = "connecting" | "live" | "down";
@@ -51,7 +63,7 @@ export type LiveStatus = "connecting" | "live" | "down";
 /** Called with every event and its sequence number (higher means newer). */
 export type EventListener = (event: AppEvent, seq: number) => void;
 
-const EVENT_TYPES = ["chapter", "book", "pool", "book-added", "book-deleted"] as const;
+const EVENT_TYPES = ["chapter", "book", "pool", "book-added", "book-deleted", "outputs"] as const;
 const RECONNECT_MS = 3000;
 
 // One EventSource for the whole page, shared by everything that listens.

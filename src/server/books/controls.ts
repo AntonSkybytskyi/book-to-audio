@@ -1,5 +1,6 @@
 import type { PoolControl } from "../convert/pool.js";
 import type { EventBus } from "../events/bus.js";
+import type { OutputBuilder } from "../outputs/builder.js";
 import { KeyedLock } from "./keyed-lock.js";
 import type { ChapterQueue } from "./queue.js";
 import type { BookRepository } from "./repository.js";
@@ -27,6 +28,8 @@ export interface BookControlsDeps {
   storage: Storage;
   bus: EventBus;
   pool: Pick<PoolControl, "notify" | "abortChapter" | "abortBook">;
+  /** Stops the build of a book's downloads, which a regenerate or a delete makes pointless. */
+  outputs: Pick<OutputBuilder, "cancel">;
   /** How long to wait for workers to stop before giving up. */
   abortTimeoutMs?: number;
   logger?: { warn(context: object, message: string): void };
@@ -104,6 +107,7 @@ export class BookControls {
       };
       if (chapter.status !== "generating") {
         restartChapter();
+        await this.stopBuild(bookId);
         return;
       }
 
@@ -138,6 +142,7 @@ export class BookControls {
         this.requeueAfterFailure(bookId, { position, ids });
         throw error;
       }
+      await this.stopBuild(bookId);
     });
   }
 
@@ -166,6 +171,7 @@ export class BookControls {
         this.requeueAfterFailure(bookId, { ids: held });
         throw error;
       }
+      await this.stopBuild(bookId);
     });
   }
 
@@ -180,8 +186,15 @@ export class BookControls {
     return this.lock.run(bookId, async () => {
       const { transitions, storage, pool, bus, logger } = this.deps;
       if (!transitions.remove(bookId)) throw missingBook();
-      if (!(await settledWithin(pool.abortBook(bookId), this.abortTimeoutMs))) {
-        logger?.warn({ bookId }, "workers did not stop in time; deleting the files anyway");
+      const stopped = await Promise.all([
+        settledWithin(pool.abortBook(bookId), this.abortTimeoutMs),
+        settledWithin(this.deps.outputs.cancel(bookId), this.abortTimeoutMs),
+      ]);
+      if (stopped.includes(false)) {
+        logger?.warn(
+          { bookId },
+          "workers or a build did not stop in time; deleting the files anyway",
+        );
       }
       let filesError: unknown = null;
       try {
@@ -192,6 +205,17 @@ export class BookControls {
       bus.publish({ type: "book-deleted", bookId });
       return { filesError };
     });
+  }
+
+  /**
+   * The book is not `done` any more, so a build of its downloads is wasted work (and could not be
+   * recorded anyway). Called once the chapters are back in the queue: before that, the book is
+   * still done and another build could start.
+   */
+  private async stopBuild(bookId: string): Promise<void> {
+    if (!(await settledWithin(this.deps.outputs.cancel(bookId), this.abortTimeoutMs))) {
+      this.deps.logger?.warn({ bookId }, "a build of the downloads did not stop in time");
+    }
   }
 
   private get abortTimeoutMs() {

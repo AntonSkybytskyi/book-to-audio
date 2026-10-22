@@ -60,7 +60,7 @@ describe("sweepStorage", () => {
 
     const result = sweepStorage(ctx.db, ctx.storage);
 
-    expect(result).toEqual({ orphanDirs: 0, tempFiles: 2, partsDirs: 0 });
+    expect(result).toEqual({ orphanDirs: 0, tempFiles: 2, partsDirs: 0, buildDirs: 0 });
     expect(fs.existsSync(source)).toBe(true);
     expect(fs.existsSync(done)).toBe(true);
     expect(fs.existsSync(temp)).toBe(false);
@@ -108,6 +108,23 @@ describe("sweepStorage", () => {
     expect(fs.existsSync(noChapter)).toBe(false);
   });
 
+  it("removes the half-built files of an interrupted build and keeps the finished downloads", () => {
+    const id = addBook();
+    const m4b = touch("outputs", id, "book.m4b");
+    const zip = touch("outputs", id, "book.zip");
+    const work = touch("outputs", id, ".9f3c1a", "meta.txt");
+    const orphan = randomUUID();
+    const orphanFile = touch("outputs", orphan, "book.m4b");
+
+    const result = sweepStorage(ctx.db, ctx.storage);
+
+    expect(result).toMatchObject({ buildDirs: 1, orphanDirs: 1 });
+    expect(fs.existsSync(path.dirname(work))).toBe(false);
+    expect(fs.existsSync(m4b)).toBe(true);
+    expect(fs.existsSync(zip)).toBe(true);
+    expect(fs.existsSync(orphanFile)).toBe(false);
+  });
+
   it("leaves anything that is not named like a book id", () => {
     const stray = touch("books", "not-a-uuid", "keep.txt");
     const loose = touch("audio", "notes.txt");
@@ -116,6 +133,7 @@ describe("sweepStorage", () => {
       orphanDirs: 0,
       tempFiles: 0,
       partsDirs: 0,
+      buildDirs: 0,
     });
     expect(fs.existsSync(stray)).toBe(true);
     expect(fs.existsSync(loose)).toBe(true);
@@ -126,6 +144,7 @@ describe("sweepStorage", () => {
       orphanDirs: 0,
       tempFiles: 0,
       partsDirs: 0,
+      buildDirs: 0,
     });
   });
 });

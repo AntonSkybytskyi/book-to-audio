@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { formatClock, formatMinutes, formatWords, languageName, pluralize } from "./format";
+import {
+  formatBytes,
+  formatClock,
+  formatMinutes,
+  formatWords,
+  languageName,
+  pluralize,
+} from "./format";
 
 describe("formatClock", () => {
   it.each([
@@ -39,5 +46,19 @@ describe("text helpers", () => {
   it("names languages and passes unknown codes through", () => {
     expect(languageName("uk")).toBe("Ukrainian");
     expect(languageName("de")).toBe("de");
+  });
+});
+
+describe("formatBytes", () => {
+  it.each([
+    [0, "1 KB"],
+    [900, "1 KB"],
+    [512 * 1024, "512 KB"],
+    [1024 * 1024 * 3.26, "3.3 MB"],
+    [74.4 * 1024 * 1024, "74 MB"],
+    [1000 * 1024 * 1024, "1.0 GB"],
+    [12.6 * 1024 ** 3, "13 GB"],
+  ])("formats %d bytes as %s", (bytes, expected) => {
+    expect(formatBytes(bytes)).toBe(expected);
   });
 });

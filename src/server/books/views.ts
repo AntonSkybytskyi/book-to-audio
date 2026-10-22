@@ -1,4 +1,5 @@
 import type { TtsEngine } from "../tts/engine.js";
+import { toOutputsView, type OutputsView } from "../outputs/view.js";
 import { estimateMinutes } from "./estimate.js";
 import type { BookRepository, BookWithTotals, Chapter } from "./repository.js";
 
@@ -38,6 +39,8 @@ export interface BookSummaryView {
   wordCount: number;
   estimatedMinutes: number;
   durationSeconds: number;
+  /** The M4B and ZIP: whether they can be downloaded, are being built or failed. */
+  outputs: OutputsView;
 }
 
 export interface BookView extends BookSummaryView {
@@ -60,6 +63,7 @@ export const toSummaryView = (book: BookWithTotals): BookSummaryView => ({
   wordCount: book.wordCount,
   estimatedMinutes: estimateMinutes(book.wordCount),
   durationSeconds: book.durationSeconds,
+  outputs: toOutputsView(book.status, book.audioGeneration, book.outputs),
 });
 
 export const toChapterView = (chapter: Chapter): ChapterView => ({

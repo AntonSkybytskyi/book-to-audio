@@ -29,6 +29,21 @@ describe("runProcess", () => {
     expect(result.stdout.toString()).toBe("out");
   });
 
+  it("hands stdout to onStdout as it arrives and does not collect it", async () => {
+    const [cmd, args] = node(
+      `process.stdout.write("one"); setTimeout(() => process.stdout.write("two"), 30)`,
+    );
+    const seen: string[] = [];
+
+    const result = await runProcess(cmd, args, {
+      timeoutMs: 5000,
+      onStdout: (chunk) => seen.push(chunk.toString()),
+    });
+
+    expect(seen.join("")).toBe("onetwo");
+    expect(result.stdout.length).toBe(0);
+  });
+
   it("writes input to stdin", async () => {
     const [cmd, args] = node(`process.stdin.pipe(process.stdout)`);
 

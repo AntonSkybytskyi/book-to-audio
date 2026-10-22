@@ -12,6 +12,7 @@ import { BookDeleted } from "./BookDeleted";
 import { BookHeader } from "./BookHeader";
 import { ChapterRow } from "./ChapterRow";
 import { DeleteBookDialog } from "./DeleteBookDialog";
+import { Downloads } from "./Downloads";
 import { LoadState } from "./LoadState";
 import { ProgressBar } from "./ProgressBar";
 import { RegenerateChapterDialog } from "./RegenerateChapterDialog";
@@ -101,6 +102,8 @@ export function BookView({ id }: { id: string }) {
       </section>
 
       <BookControls book={book} onChanged={refresh} onDelete={() => setDeleting(true)} />
+
+      <Downloads book={book} onChanged={refresh} />
 
       <p className={shared.error} role="alert">
         {playbackError}

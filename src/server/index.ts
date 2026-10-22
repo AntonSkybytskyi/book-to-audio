@@ -4,6 +4,7 @@ import nextModule from "next";
 import { buildServer } from "./app.js";
 import { concatWebm, encodeWebm } from "./audio/ffmpeg.js";
 import { ChapterQueue } from "./books/queue.js";
+import { BookRepository } from "./books/repository.js";
 import { sweepStorage } from "./books/sweep.js";
 import { Storage } from "./books/storage.js";
 import { loadConfig } from "./config.js";
@@ -13,6 +14,10 @@ import { PoolStateStore } from "./convert/pool-state.js";
 import { WorkerPool } from "./convert/pool.js";
 import { openDatabase } from "./db/database.js";
 import { EventBus } from "./events/bus.js";
+import { OutputBuilder } from "./outputs/builder.js";
+import { findNice } from "./outputs/nice.js";
+import { createOutputProducer } from "./outputs/produce.js";
+import { OutputRepository } from "./outputs/repository.js";
 import { SettingsStore } from "./settings/settings.js";
 import { PiperEngine } from "./tts/piper.js";
 import { createEngine } from "./tts/index.js";
@@ -73,6 +78,22 @@ async function main() {
     bus,
     logger,
   });
+  const outputs = new OutputBuilder({
+    books: new BookRepository(db),
+    outputs: new OutputRepository(db),
+    storage,
+    producer: createOutputProducer({
+      storage,
+      ffmpegBin: config.ffmpegBin,
+      ffprobeBin: config.ffprobeBin,
+      m4bBitrate: config.m4bBitrate,
+      niceBin: findNice(),
+      minFreeBytes: config.minFreeDiskMb * 1024 ** 2,
+      logger,
+    }),
+    bus,
+    logger,
+  });
   const app = buildServer({
     db,
     nextHandler: nextApp.getRequestHandler(),
@@ -83,6 +104,7 @@ async function main() {
     allowedHosts: config.allowedHosts,
     bus,
     pool,
+    outputs,
     settings,
   });
 
@@ -93,6 +115,7 @@ async function main() {
     let code = 0;
     try {
       await pool.stop();
+      await outputs.stop();
       await app.close();
       await nextApp.close();
     } catch (error) {
@@ -106,11 +129,12 @@ async function main() {
   process.once("SIGINT", shutdown);
   process.once("SIGTERM", shutdown);
 
-  if (swept.orphanDirs + swept.tempFiles + swept.partsDirs > 0) {
+  if (swept.orphanDirs + swept.tempFiles + swept.partsDirs + swept.buildDirs > 0) {
     app.log.info(swept, "removed leftovers of an interrupted run");
   }
   // Interrupted chapters are re-queued before the first request can see them as running.
   pool.start();
+  outputs.start();
   await app.listen({ host: config.host, port: config.port });
   app.log.info(
     `data directory: ${config.dataDir}, TTS engine: ${engine.id}, workers: ${pool.status().workers}`,

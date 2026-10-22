@@ -85,6 +85,7 @@ describe("book control routes", () => {
       maxUploadBytes: 1024 * 1024,
       bus: ctx.bus,
       pool: ctx.pool,
+      outputs: ctx.outputs,
       settings: ctx.settings,
     });
   });

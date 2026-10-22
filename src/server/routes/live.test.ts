@@ -45,6 +45,7 @@ describe("live updates and pool routes", () => {
       parseEpub: ctx.parseEpub,
       bus: ctx.bus,
       pool: ctx.pool,
+      outputs: ctx.outputs,
       settings: ctx.settings,
       eventStream: { heartbeatMs: 15, ...limits },
     });

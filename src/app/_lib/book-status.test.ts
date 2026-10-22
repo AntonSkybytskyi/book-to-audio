@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Book, BookSummary, Chapter } from "./api";
+import { NO_OUTPUTS, type Book, type BookSummary, type Chapter, type Outputs } from "./api";
 import {
   bookIsBusy,
   bookSummary,
@@ -22,8 +22,18 @@ const summary = (overrides: Partial<BookSummary> = {}): BookSummary => ({
   wordCount: 1000,
   estimatedMinutes: 90,
   durationSeconds: 3725,
+  outputs: NO_OUTPUTS,
   ...overrides,
 });
+
+const ready: Outputs = {
+  ...NO_OUTPUTS,
+  state: "ready",
+  available: true,
+  progress: 1,
+  m4bBytes: 1000,
+  zipBytes: 2000,
+};
 
 const chapter = (position: number, overrides: Partial<Chapter> = {}): Chapter => ({
   position,
@@ -57,6 +67,9 @@ describe("libraryStatus", () => {
     expect(libraryStatus(summary({ status: "paused" }))).toBe("Paused · 3 of 10 chapters ready");
     expect(libraryStatus(summary({ status: "done", doneCount: 10 }))).toBe(
       "Ready to listen · 10 of 10 chapters ready · 1:02:05",
+    );
+    expect(libraryStatus(summary({ status: "done", doneCount: 10, outputs: ready }))).toBe(
+      "Ready to listen · 10 of 10 chapters ready · 1:02:05 · Ready to download",
     );
     expect(libraryStatus(summary({ status: "done_with_errors", failedCount: 1 }))).toBe(
       "1 chapter failed · 3 of 10 chapters ready",
@@ -112,11 +125,30 @@ describe("progress and polling", () => {
     expect(bookIsBusy(book())).toBe(true);
     expect(bookIsBusy(book({ status: "paused", chapters: running }))).toBe(true);
     expect(bookIsBusy(book({ status: "paused" }))).toBe(false);
-    expect(bookIsBusy(book({ status: "done" }))).toBe(false);
+    expect(bookIsBusy(book({ status: "done", outputs: ready }))).toBe(false);
+  });
+
+  it("keeps refreshing a finished book until its downloads are ready or have failed", () => {
+    expect(bookIsBusy(book({ status: "done" }))).toBe(true);
+    expect(
+      bookIsBusy(
+        book({ status: "done", outputs: { ...ready, available: false, state: "building" } }),
+      ),
+    ).toBe(true);
+    expect(
+      bookIsBusy(
+        book({ status: "done", outputs: { ...ready, available: false, state: "failed" } }),
+      ),
+    ).toBe(false);
   });
 
   it("keeps refreshing the library while a book is converting or paused", () => {
-    expect(libraryIsBusy([summary({ status: "done" }), summary({ status: "paused" })])).toBe(true);
-    expect(libraryIsBusy([summary({ status: "done" }), summary({ status: "ready" })])).toBe(false);
+    expect(
+      libraryIsBusy([summary({ status: "done", outputs: ready }), summary({ status: "paused" })]),
+    ).toBe(true);
+    expect(
+      libraryIsBusy([summary({ status: "done", outputs: ready }), summary({ status: "ready" })]),
+    ).toBe(false);
+    expect(libraryIsBusy([summary({ status: "done" })])).toBe(true);
   });
 });

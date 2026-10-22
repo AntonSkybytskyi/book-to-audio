@@ -1,4 +1,5 @@
 import type { BookStatus, ChapterStatus } from "../books/repository.js";
+import type { OutputsView } from "../outputs/view.js";
 
 /** Small JSON payloads for the live updates in `GET /api/events`. */
 export interface ChapterEvent {
@@ -48,7 +49,19 @@ export interface BookDeletedEvent {
   bookId: string;
 }
 
-export type AppEvent = ChapterEvent | BookEvent | PoolEvent | BookAddedEvent | BookDeletedEvent;
+/** The state of a book's downloads changed (progress is throttled). */
+export interface OutputsEvent extends OutputsView {
+  type: "outputs";
+  bookId: string;
+}
+
+export type AppEvent =
+  | ChapterEvent
+  | BookEvent
+  | PoolEvent
+  | BookAddedEvent
+  | BookDeletedEvent
+  | OutputsEvent;
 /** `seq` grows with every event, so a client can tell which of two states is newer. */
 export type Listener = (event: AppEvent, seq: number) => void;
 

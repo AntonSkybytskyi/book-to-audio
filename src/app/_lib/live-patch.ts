@@ -1,5 +1,24 @@
-import type { Book, BookSummary } from "./api";
-import type { AppEvent } from "./events";
+import type { Book, BookSummary, Outputs } from "./api";
+import type { AppEvent, OutputsEvent } from "./events";
+
+/** The downloads part of an outputs event. */
+const outputsOf = ({
+  state,
+  available,
+  updating,
+  progress,
+  error,
+  m4bBytes,
+  zipBytes,
+}: OutputsEvent): Outputs => ({
+  state,
+  available,
+  updating,
+  progress,
+  error,
+  m4bBytes,
+  zipBytes,
+});
 
 /**
  * Applies a live event to a book. Returns the same object when the event is not
@@ -39,6 +58,10 @@ export function patchBook(book: Book, event: AppEvent): Book | null {
     };
   }
 
+  if (event.type === "outputs" && event.bookId === book.id) {
+    return { ...book, outputs: outputsOf(event) };
+  }
+
   if (event.type === "book" && event.bookId === book.id) {
     // Converting a ready book changes every chapter (Convert, in another tab): load them again.
     // Any other change of status (pause, resume, done, regenerate) leaves the chapters to their own events.
@@ -64,6 +87,11 @@ export function patchLibrary(books: BookSummary[], event: AppEvent): BookSummary
     return books.some((book) => book.id === event.bookId)
       ? books.filter((book) => book.id !== event.bookId)
       : books;
+  }
+  if (event.type === "outputs") {
+    return books.map((book) =>
+      book.id === event.bookId ? { ...book, outputs: outputsOf(event) } : book,
+    );
   }
   if (event.type !== "book") return books;
   if (!books.some((book) => book.id === event.bookId)) return null;

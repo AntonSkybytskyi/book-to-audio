@@ -34,6 +34,7 @@ describe("buildServer", () => {
       parseEpub: ctx.parseEpub,
       bus: ctx.bus,
       pool: ctx.pool,
+      outputs: ctx.outputs,
       settings: ctx.settings,
     });
   });
@@ -121,6 +122,7 @@ describe("buildServer", () => {
       parseEpub: ctx.parseEpub,
       bus: ctx.bus,
       pool: ctx.pool,
+      outputs: ctx.outputs,
       settings: ctx.settings,
       logger: {
         level: "info",

@@ -15,11 +15,13 @@ import { BookRepository } from "./books/repository.js";
 import { BookTransitions } from "./books/transitions.js";
 import type { Storage } from "./books/storage.js";
 import type { ParsedEpub } from "./epub/types.js";
+import type { OutputBuilder } from "./outputs/builder.js";
 import { createWorkerParser } from "./epub/worker-parser.js";
 import { QuietLogController } from "./logging.js";
 import { registerBookControlRoutes } from "./routes/book-controls.js";
 import { registerBookRoutes } from "./routes/books.js";
 import { registerConfigRoute } from "./routes/config.js";
+import { registerDownloadRoutes } from "./routes/downloads.js";
 import { registerErrorHandler } from "./routes/errors.js";
 import { registerEventsRoute, type EventStreamLimits } from "./routes/events.js";
 import { registerPoolRoutes } from "./routes/pool.js";
@@ -43,6 +45,8 @@ export interface ServerDeps {
   /** Where the queue and pool publish live updates; `GET /api/events` streams them. */
   bus: EventBus;
   pool: PoolControl;
+  /** Builds the M4B and ZIP of finished books. */
+  outputs: Pick<OutputBuilder, "request" | "cancel" | "filesMissing">;
   settings: SettingsStore;
   /** Limits of the event stream; the defaults suit the app, tests shorten them. */
   eventStream?: EventStreamLimits;
@@ -73,6 +77,7 @@ export function buildServer({
   maxUploadBytes,
   bus,
   pool,
+  outputs,
   settings,
   eventStream = {},
   allowedHosts = [],
@@ -96,6 +101,7 @@ export function buildServer({
     storage,
     bus,
     pool,
+    outputs,
     logger: app.log,
   });
 
@@ -120,6 +126,7 @@ export function buildServer({
       registerUpload(api, { repo, storage, engine, bus, parseEpub });
       registerBookRoutes(api, { repo, storage, engine, bus, pool });
       registerBookControlRoutes(api, { repo, engine, controls });
+      registerDownloadRoutes(api, { repo, storage, engine, outputs });
       registerPoolRoutes(api, pool);
       registerSettingsRoutes(api, { settings, pool });
       registerEventsRoute(api, { bus, pool, ...eventStream });

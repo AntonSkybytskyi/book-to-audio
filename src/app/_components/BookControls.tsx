@@ -58,7 +58,6 @@ export function BookControls({ book, onChanged, onDelete }: Props) {
         >
           Regenerate book
         </button>
-        {/* The M4B and ZIP downloads come in a later slice; they go here, before Delete. */}
         <button
           type="button"
           className={cx(shared.button, shared.small, shared.outlineDanger, styles.delete)}

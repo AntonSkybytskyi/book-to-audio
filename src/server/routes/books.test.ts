@@ -44,6 +44,7 @@ describe("book routes", () => {
       parseEpub,
       bus: ctx.bus,
       pool: ctx.pool,
+      outputs: ctx.outputs,
       settings: ctx.settings,
     });
 

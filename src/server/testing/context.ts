@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import type Database from "better-sqlite3";
 import { ChapterQueue } from "../books/queue.js";
+import { BookRepository } from "../books/repository.js";
 import { Storage } from "../books/storage.js";
 import { ChunkStore } from "../convert/chunk-store.js";
 import { createChapterConverter } from "../convert/convert-chapter.js";
@@ -11,8 +12,11 @@ import { WorkerPool } from "../convert/pool.js";
 import { openDatabase } from "../db/database.js";
 import { parseEpubFile } from "../epub/parse.js";
 import { EventBus } from "../events/bus.js";
+import { OutputBuilder } from "../outputs/builder.js";
+import { OutputRepository } from "../outputs/repository.js";
 import { SettingsStore } from "../settings/settings.js";
 import { fakeEncode, fakeJoin } from "./fake-codec.js";
+import { fakeProducer } from "./fake-outputs.js";
 import { FakeEngine, type FakeEngineOptions } from "../tts/fake.js";
 
 export interface TestContext {
@@ -22,6 +26,8 @@ export interface TestContext {
   dataDir: string;
   bus: EventBus;
   settings: SettingsStore;
+  /** A real output builder with a fake producer. It listens to the bus only after a test calls `start()`. */
+  outputs: OutputBuilder;
   /** A real pool that has not been started: no worker runs unless a test calls `start()`. */
   pool: WorkerPool;
   /** Parses in this thread; the app itself uses a worker thread, which tests do not need. */
@@ -53,6 +59,13 @@ export function createTestContext(engineOptions?: FakeEngineOptions): TestContex
     settings,
     bus,
   });
+  const outputs = new OutputBuilder({
+    books: new BookRepository(db),
+    outputs: new OutputRepository(db),
+    storage,
+    producer: fakeProducer,
+    bus,
+  });
   return {
     db,
     dataDir,
@@ -60,6 +73,7 @@ export function createTestContext(engineOptions?: FakeEngineOptions): TestContex
     engine,
     bus,
     settings,
+    outputs,
     pool,
     parseEpub: parseEpubFile,
     cleanup() {

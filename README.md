@@ -40,7 +40,9 @@ Settings come from environment variables:
 | `PIPER_BIN`          | `piper`               | Piper executable                                                                               |
 | `PIPER_VOICES_DIR`   | `/opt/piper-voices`   | Directory with Piper `.onnx` voices and their `.onnx.json` files (set in the Docker image)      |
 | `FFMPEG_BIN`         | `ffmpeg`              | ffmpeg executable                                                                              |
+| `FFPROBE_BIN`        | `ffprobe`             | ffprobe executable (measures chapter files before the M4B is built)                            |
 | `OPUS_BITRATE`       | `32k`                 | Bitrate of the chapter WebM/Opus files                                                         |
+| `M4B_BITRATE`        | `64k`                 | AAC bitrate of the M4B audiobook (mono)                                                        |
 | `ALLOWED_HOSTS`      | —                     | Extra host names the app answers to, comma separated. `localhost`, `127.0.0.1` and `[::1]` always work |
 | `WORKERS`            | half the CPU cores    | Default number of chapters converted at the same time (at least 1). A value saved on the Settings page wins |
 | `MIN_FREE_DISK_MB`   | `500`                 | Conversion pauses (banner, Resume) when less than this is free on the disk that holds `DATA_DIR` |
@@ -54,6 +56,8 @@ Conversion runs on a pool of workers (Settings page, or `GET`/`PATCH /api/settin
 ```bash
 TTS_ENGINE=fake FAKE_TTS_FAIL_MARKER='[fail]' FAKE_TTS_FLAKY_MARKER='[flaky]' pnpm dev
 ```
+
+When every chapter of a book is done, the app builds two downloads in the background, one book at a time and at a low CPU priority (`nice`): an M4B (mono AAC, chapter markers, title, author, album and the cover as an attached picture) and a ZIP of the chapter WebM files (`01 - Chapter title.webm`, stored not compressed, tagged with title, artist, album and track number, no cover). They live in `outputs/<book>/` and are offered only while they were built from the book's current audio: regenerating a chapter withdraws them at once ("Updating downloads…") and they are rebuilt when the book is done again. A book that finished with failed chapters gets none. `GET /api/books/:id/downloads/m4b` and `/zip` serve them (409 until current, Range supported); `POST /api/books/:id/outputs/rebuild` retries a failed build. A build that fails (a chapter file missing or cut short, a full disk) shows its error with a Retry button.
 
 Requests whose `Host` header is not a local name get 403 (this stops DNS rebinding), and so do POST/PATCH requests that come from another origin. Set `ALLOWED_HOSTS` if you open the app by another name, for example `ALLOWED_HOSTS=books.lan`.
 
@@ -78,7 +82,7 @@ The same checks run in the container with `docker compose run --rm check`.
 - `src/server`: Fastify server, config and SQLite (`db/migrations.ts` holds the schema migrations).
   - `epub/`: EPUB parser ([why in-house](docs/decisions/epub-parser.md)).
   - `tts/`: engine interface, Piper and fake engines, text chunking.
-  - `audio/`: ffmpeg wrapper. `convert/`: chapter conversion, chunk store and the worker pool.
+  - `audio/`: ffmpeg wrapper. `outputs/`: the M4B and ZIP builder (ffmpeg commands, ffmetadata escaping, file names, ZIP writer, build queue). `convert/`: chapter conversion, chunk store and the worker pool.
   - `events/`: in-process event bus behind `GET /api/events`. `settings/`: owner settings.
   - `books/`: storage paths, repository and chapter queue. `routes/`: HTTP API under `/api`.
 - `src/app`: Next.js App Router pages (library, preview, book page, settings).

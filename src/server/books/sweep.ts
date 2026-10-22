@@ -11,6 +11,8 @@ export interface SweepResult {
   orphanDirs: number;
   /** Unfinished `*.tmp` audio files left by a crash during encoding. */
   tempFiles: number;
+  /** Half-built download files (`outputs/<book>/.<id>/`) left by a crash during a build. */
+  buildDirs: number;
   /** `.parts` folders of chapters that are finished (their audio is encoded) or no longer exist. */
   partsDirs: number;
 }
@@ -22,7 +24,7 @@ export interface SweepResult {
  */
 export function sweepStorage(db: Database.Database, storage: Storage): SweepResult {
   const known = new Set(db.prepare("SELECT id FROM books").pluck().all() as string[]);
-  const result: SweepResult = { orphanDirs: 0, tempFiles: 0, partsDirs: 0 };
+  const result: SweepResult = { orphanDirs: 0, tempFiles: 0, partsDirs: 0, buildDirs: 0 };
   const isOpen = db
     .prepare(
       `SELECT 1 FROM chapters
@@ -38,6 +40,13 @@ export function sweepStorage(db: Database.Database, storage: Storage): SweepResu
       if (!known.has(entry.name)) {
         fs.rmSync(dir, { recursive: true, force: true });
         result.orphanDirs++;
+      } else if (area === "outputs") {
+        // Nothing is building at startup: every hidden entry is a leftover of an interrupted build.
+        for (const leftover of safeReaddir(dir)) {
+          if (!leftover.name.startsWith(".")) continue;
+          fs.rmSync(path.join(dir, leftover.name), { recursive: true, force: true });
+          result.buildDirs++;
+        }
       } else if (area === "audio") {
         for (const file of safeReaddir(dir)) {
           const full = path.join(dir, file.name);

@@ -39,6 +39,16 @@ export class Storage {
     return path.join("audio", bookId, `${String(position).padStart(2, "0")}.webm`);
   }
 
+  /** Where the finished M4B and ZIP of a book are kept. */
+  outputsDir(bookId: string): string {
+    return path.join(this.dataDir, "outputs", bookId);
+  }
+
+  /** Absolute path of one of the two download files of a book. */
+  outputFile(bookId: string, kind: "m4b" | "zip"): string {
+    return path.join(this.outputsDir(bookId), `book.${kind}`);
+  }
+
   /** Where the finished chunks of a chapter wait until the chapter is encoded. */
   partsDir(bookId: string, position: number): string {
     return path.join(this.audioDir(bookId), `${String(position).padStart(2, "0")}.parts`);
@@ -64,6 +74,22 @@ export class Storage {
     return dir;
   }
 
+  /**
+   * The folder for the outputs of a book that exists. The parent is made if needed, but the
+   * book's own folder never is: a build only starts for a book that is in the database, and
+   * delete waits for it, so a deleted book does not get its folder back.
+   */
+  ensureOutputsDir(bookId: string): string {
+    const dir = this.outputsDir(bookId);
+    fs.mkdirSync(path.dirname(dir), { recursive: true, mode: 0o700 });
+    try {
+      fs.mkdirSync(dir, { mode: 0o700 });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    }
+    return dir;
+  }
+
   ensureAudioDir(bookId: string): string {
     const dir = this.audioDir(bookId);
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -73,10 +99,10 @@ export class Storage {
   /**
    * The folders under the data directory that hold one `<book id>` folder per book. Deleting
    * a book and the startup sweep both go through this list: a new kind of per-book files
-   * (the M4B and ZIP outputs) is added here, and nowhere else.
+   * is added here, and nowhere else.
    */
   get bookAreas(): readonly string[] {
-    return ["books", "audio"];
+    return ["books", "audio", "outputs"];
   }
 
   /** Where `area` keeps the files of one book. */
@@ -86,7 +112,7 @@ export class Storage {
 
   /**
    * Removes everything stored for a book: the upload, the cover, finished chapters, saved
-   * chunks and temporary files. Every folder is tried even if the first cannot be removed;
+   * chunks, the M4B and ZIP, and temporary files. Every folder is tried even if the first cannot be removed;
    * the first error is thrown afterwards. Whatever stays behind belongs to no book, so the
    * startup sweep removes it.
    */
