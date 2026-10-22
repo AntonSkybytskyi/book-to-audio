@@ -11,3 +11,8 @@ Work is tracked in Linear.
 
 New issues for this repo go into the "Book to audio" project in team `ANO`.
 Reference the issue ID in branch names (`ano-123-short-title`) and commit messages so Linear links them.
+
+Feature tickets describe what the user gets, not how to build it: problem, goal, expected behaviour, acceptance criteria.
+No routes, schema, file names or implementation plans in them.
+Technical details belong only in tickets whose goal is technical (for example migrating to Tailwind or moving Piper into its own service).
+Even there, ask the owner about each technical detail before putting it in the ticket.
