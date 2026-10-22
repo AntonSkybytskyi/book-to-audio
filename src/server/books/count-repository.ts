@@ -89,8 +89,9 @@ export class CountRepository {
           .run();
         this.db
           .prepare(
+            // Only `value`: databases created by early scaffold builds have no `updated_at` here.
             `INSERT INTO app_meta (key, value) VALUES (?, ?)
-             ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
+             ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
           )
           .run(key, String(version));
         return saved === undefined ? "recorded" : "changed";

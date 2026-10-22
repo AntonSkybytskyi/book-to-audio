@@ -164,6 +164,17 @@ describe("counting prepared text in the database", () => {
       expect(counts.resetCountsIfRulesChanged(4)).toBe("changed");
       expect(stored("a")).toEqual([null]);
     });
+
+    it("works on an app_meta table without updated_at, as created by early scaffold builds", () => {
+      ctx.db.exec(`
+        DROP TABLE app_meta;
+        CREATE TABLE app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      `);
+
+      expect(counts.resetCountsIfRulesChanged(3)).toBe("recorded");
+      expect(counts.resetCountsIfRulesChanged(4)).toBe("changed");
+      expect(counts.resetCountsIfRulesChanged(4)).toBe("same");
+    });
   });
 
   describe("workload", () => {
