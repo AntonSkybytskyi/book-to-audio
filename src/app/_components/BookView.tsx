@@ -1,0 +1,174 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useCallback, useRef, useState } from "react";
+import { audioUrl, regenerateChapter } from "../_lib/api";
+import { bookSummary, overallProgress } from "../_lib/book-status";
+import { speedTestSecondsLeft } from "../_lib/benchmark";
+import { bookTimeLeft } from "../_lib/time-left";
+import { useBenchmark } from "../_lib/use-benchmark";
+import { usePool } from "../_lib/pool-store";
+import { useBook } from "../_lib/use-book";
+import { BookControls } from "./BookControls";
+import { BookDeleted } from "./BookDeleted";
+import { BookHeader } from "./BookHeader";
+import { ChapterRow } from "./ChapterRow";
+import { DeleteBookDialog } from "./DeleteBookDialog";
+import { Downloads } from "./Downloads";
+import { LoadState } from "./LoadState";
+import { ProgressBar } from "./ProgressBar";
+import { RegenerateChapterDialog } from "./RegenerateChapterDialog";
+import styles from "./BookView.module.css";
+import shared from "./shared.module.css";
+
+export function BookView({ id }: { id: string }) {
+  const router = useRouter();
+  const { data: book, error, stale, deleted, refresh } = useBook(id);
+  const pool = usePool();
+  const { data: speedTest } = useBenchmark();
+  const audio = useRef<HTMLAudioElement>(null);
+  /** The chapter and audio version that the shared <audio> element has loaded. */
+  const loaded = useRef<{ position: number; version: number } | null>(null);
+  const [current, setCurrent] = useState<number | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [playbackError, setPlaybackError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [asking, setAsking] = useState<number | null>(null);
+
+  const regenerate = useCallback(
+    async (position: number) => {
+      const result = await regenerateChapter(id, position);
+      refresh();
+      return result;
+    },
+    [id, refresh],
+  );
+
+  if (deleted) return <BookDeleted />;
+  if (!book) return <LoadState error={error} />;
+
+  const timeLeft = bookTimeLeft(book, pool, speedTestSecondsLeft(speedTest));
+
+  const onPlayFailed = (reason: unknown) => {
+    // Starting a new chapter interrupts the previous load; that is not an error.
+    if (reason instanceof DOMException && reason.name === "AbortError") return;
+    setPlaying(false);
+    setCurrent(null); // So the next click loads the chapter again instead of resuming a dead one.
+    loaded.current = null;
+    setPlaybackError("This chapter could not be played in your browser.");
+  };
+
+  // One shared <audio> element, so only one chapter can play at a time.
+  const toggle = (position: number) => {
+    const element = audio.current;
+    const chapter = book.chapters.find((c) => c.position === position);
+    if (!element || !chapter) return;
+    setPlaybackError(null);
+    if (!element.paused && current === position) {
+      element.pause();
+      return;
+    }
+    const same = loaded.current?.position === position;
+    // The audio was replaced since it was loaded: start the new file, never the old one.
+    if (same && loaded.current?.version === chapter.audioVersion) {
+      setCurrent(position);
+      void element.play().catch(onPlayFailed);
+      return;
+    }
+    element.src = audioUrl(id, position, chapter.audioVersion);
+    loaded.current = { position, version: chapter.audioVersion };
+    setCurrent(position);
+    void element.play().catch(onPlayFailed);
+  };
+
+  return (
+    <div className={shared.page}>
+      <BookHeader
+        id={book.id}
+        title={book.title}
+        author={book.author}
+        hasCover={book.hasCover}
+        language={book.language}
+      />
+
+      <section className={styles.progress} aria-label="Conversion progress">
+        {book.status !== "ready" && (
+          <ProgressBar value={overallProgress(book)} label="Overall conversion progress" />
+        )}
+        <p className={styles.summary} role="status" aria-live="polite">
+          {bookSummary(book, pool?.state === "paused")}
+        </p>
+        {timeLeft && <p className={styles.timeLeft}>{timeLeft}</p>}
+        {book.status === "ready" && (
+          <Link href={`/books/${book.id}/preview`} className={`${shared.button} ${styles.cta}`}>
+            Review and convert
+          </Link>
+        )}
+        {stale && <p className={styles.stale}>Lost contact with the server. Trying again…</p>}
+      </section>
+
+      <BookControls book={book} onChanged={refresh} onDelete={() => setDeleting(true)} />
+
+      <Downloads book={book} onChanged={refresh} />
+
+      <p className={shared.error} role="alert">
+        {playbackError}
+      </p>
+
+      <ol className={styles.chapters} aria-label="Chapters">
+        {book.chapters.map((chapter) => (
+          <ChapterRow
+            key={chapter.position}
+            chapter={chapter}
+            bookPaused={book.status === "paused"}
+            current={current === chapter.position}
+            playing={current === chapter.position && playing}
+            onToggle={toggle}
+            onRegenerate={regenerate}
+            onConfirmRegenerate={setAsking}
+          />
+        ))}
+      </ol>
+
+      <RegenerateChapterDialog
+        chapter={book.chapters.find((c) => c.position === asking) ?? null}
+        onRegenerate={regenerate}
+        onClose={() => setAsking(null)}
+      />
+      <DeleteBookDialog
+        book={deleting ? { id: book.id, title: book.title } : null}
+        onClose={() => setDeleting(false)}
+        onDeleted={() => router.push("/")}
+      />
+
+      {/* eslint-disable-next-line jsx-a11y/media-has-caption -- spoken audio, no captions exist */}
+      <audio
+        ref={audio}
+        preload="none"
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={() => {
+          setPlaying(false);
+          setCurrent(null);
+        }}
+        onError={() => {
+          if (!audio.current?.getAttribute("src")) return;
+          // A later request for a replaced file is refused by the server (410), which the
+          // element reports as a plain error: tell that apart from a broken file.
+          const wanted = book.chapters.find((c) => c.position === loaded.current?.position);
+          const replaced = wanted !== undefined && wanted.audioVersion !== loaded.current?.version;
+          setPlaying(false);
+          setCurrent(null);
+          loaded.current = null; // The next play loads the current version from the start.
+          if (replaced) {
+            setPlaybackError("A new version of this chapter is ready. Press play to hear it.");
+          } else {
+            setPlaybackError("This chapter could not be loaded. Click play to try again.");
+            refresh(); // It may have been replaced a moment ago, and the page does not know yet.
+          }
+        }}
+      />
+    </div>
+  );
+}

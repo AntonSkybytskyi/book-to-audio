@@ -10,6 +10,12 @@ services:
     restart: unless-stopped
     # Reap ffmpeg / Piper child processes.
     init: true
+    # Limits, so a hostile or broken book cannot take over the machine.
+    mem_limit: 3g
+    pids_limit: 512
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
 
   # Lint, format check, typecheck and tests inside the container:
   #   docker compose run --rm check

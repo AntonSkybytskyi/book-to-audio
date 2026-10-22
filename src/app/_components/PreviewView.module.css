@@ -1,0 +1,143 @@
+.settings {
+  margin-top: 2rem;
+  padding: 1rem 1.25rem;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+}
+
+.field {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: center;
+}
+
+.label {
+  font-weight: 600;
+}
+
+.select {
+  min-height: 2.5rem;
+  padding: 0.25rem 0.75rem;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+}
+
+.note,
+.warning {
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.note {
+  color: var(--ink-muted);
+}
+
+.warning {
+  color: var(--danger);
+}
+
+/* The language is a guess the owner should look at: marked, but not an error. */
+.check {
+  padding-left: 0.75rem;
+  border-left: 3px solid var(--accent);
+  color: var(--ink);
+}
+
+.origin {
+  font-weight: 600;
+}
+
+.chapters {
+  margin-top: 2.5rem;
+}
+
+.chaptersHead {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.25rem 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.chaptersTitle {
+  font-family: var(--font-serif);
+  font-size: 1.3rem;
+}
+
+.total {
+  font-size: 0.9rem;
+  color: var(--ink-muted);
+}
+
+.estimate {
+  display: grid;
+  gap: 0.25rem;
+  margin-bottom: 0.9rem;
+  font-size: 0.9rem;
+  color: var(--ink-muted);
+}
+
+.estimate:empty {
+  display: none;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--rule);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 2rem 1fr auto;
+  gap: 0.25rem 0.75rem;
+  align-items: baseline;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.number {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-muted);
+  text-align: right;
+}
+
+.chapterTitle {
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  overflow-wrap: anywhere;
+}
+
+.length {
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+  text-align: right;
+}
+
+@media (max-width: 30rem) {
+  .row {
+    grid-template-columns: 1.5rem 1fr;
+  }
+
+  .length {
+    grid-column: 2;
+    text-align: left;
+  }
+}
+
+.actions {
+  position: sticky;
+  bottom: 0;
+  margin-top: 2rem;
+  padding: 1rem 0;
+  background: linear-gradient(to top, var(--paper) 70%, transparent);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+}

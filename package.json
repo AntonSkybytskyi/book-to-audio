@@ -8,6 +8,7 @@
     "dev": "NODE_ENV=development tsx watch --ignore './src/app/**' src/server/index.ts",
     "build": "next build && tsc -p tsconfig.server.json",
     "start": "NODE_ENV=production node dist/server/index.js",
+    "benchmark": "node dist/server/benchmark/cli.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "oxlint",
@@ -17,8 +18,11 @@
     "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test"
   },
   "dependencies": {
+    "@fastify/multipart": "10.1.4",
     "better-sqlite3": "13.0.3",
     "fastify": "5.12.7",
+    "htmlparser2": "12.0.0",
+    "jszip": "3.10.2",
     "next": "16.4.2",
     "react": "19.3.1",
     "react-dom": "19.3.1"

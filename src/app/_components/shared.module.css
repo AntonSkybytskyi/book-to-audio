@@ -1,0 +1,116 @@
+.page {
+  max-width: var(--column);
+  margin: 0 auto;
+  padding: 2rem var(--gutter) 5rem;
+}
+
+.heading {
+  font-family: var(--font-serif);
+  font-size: clamp(1.6rem, 5vw, 2.1rem);
+  font-weight: 600;
+  line-height: 1.2;
+  text-wrap: balance;
+}
+
+.lede {
+  color: var(--ink-muted);
+  margin-top: 0.5rem;
+  max-width: 34rem;
+}
+
+.notice {
+  margin: 3rem 0;
+  max-width: 30rem;
+}
+
+.noticeTitle {
+  font-family: var(--font-serif);
+  font-size: 1.4rem;
+}
+
+.noticeBody {
+  color: var(--ink-muted);
+  margin-top: 0.5rem;
+}
+
+.error {
+  color: var(--danger);
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 1.25rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    background-color 0.15s,
+    color 0.15s;
+}
+
+.button:hover:not(:disabled) {
+  background: transparent;
+  color: var(--accent);
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.quiet {
+  background: transparent;
+  color: var(--accent);
+}
+
+.quiet:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+/* The destructive version of .button: red, so it is never mistaken for the safe choice. */
+.danger {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: var(--paper);
+}
+
+.danger:hover:not(:disabled) {
+  background: transparent;
+  color: var(--danger);
+}
+
+/* A smaller outlined button for actions beside a row of content. */
+.small {
+  min-height: 2.25rem;
+  padding: 0.25rem 0.85rem;
+  font-size: 0.875rem;
+}
+
+.outline {
+  background: transparent;
+  color: var(--accent);
+}
+
+.outline:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.outlineDanger {
+  border-color: var(--rule);
+  background: transparent;
+  color: var(--danger);
+}
+
+.outlineDanger:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: transparent;
+  color: var(--danger);
+}

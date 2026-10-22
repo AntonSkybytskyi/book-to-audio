@@ -1,0 +1,27 @@
+.track {
+  height: 0.5rem;
+  background: var(--rule);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.thin {
+  height: 0.25rem;
+}
+
+.fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: inherit;
+  transition: width 0.6s ease;
+}
+
+.busy .fill {
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.45;
+  }
+}

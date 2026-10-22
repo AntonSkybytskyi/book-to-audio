@@ -4,5 +4,8 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],
+    // Tests that start processes or build files are slow when the machine is busy with other work.
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
   },
 });
