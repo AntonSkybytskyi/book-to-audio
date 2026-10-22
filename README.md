@@ -79,6 +79,24 @@ pnpm check         # all of the above
 
 The same checks run in the container with `docker compose run --rm check`.
 
+CI (`.github/workflows/ci.yml`) runs lint, format check, typecheck, tests, build and a Docker image build (not pushed) on every pull request and every push to `main`, each as its own job.
+
+Making these checks required before a PR can be merged into `main` needs a public repo or GitHub Pro. Once that is in place:
+
+```bash
+gh api -X PUT repos/AntonSkybytskyi/book-to-audio/branches/main/protection --input - <<'EOF'
+{
+  "required_status_checks": {
+    "strict": false,
+    "contexts": ["lint", "format", "typecheck", "test", "build", "docker"]
+  },
+  "enforce_admins": true,
+  "required_pull_request_reviews": null,
+  "restrictions": null
+}
+EOF
+```
+
 ## Layout
 
 - `src/server`: Fastify server, config and SQLite (`db/migrations.ts` holds the schema migrations).
