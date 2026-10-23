@@ -1,0 +1,54 @@
+import type { AppEvent } from "@book-to-audio/contracts";
+
+// The payloads of `GET /api/events` are part of the contract with the web app.
+export type {
+  ChapterEvent,
+  OutputsEvent,
+  BenchmarkEvent,
+  AppEvent,
+} from "@book-to-audio/contracts";
+
+/** `seq` grows with every event, so a client can tell which of two states is newer. */
+export type Listener = (event: AppEvent, seq: number) => void;
+
+/**
+ * In-process publish and subscribe. The queue and pool publish; the SSE route subscribes.
+ * Sequence numbers start from the boot time, so they also grow across restarts: a client that
+ * reconnects to a restarted server never mistakes the new events for old ones.
+ */
+export class EventBus {
+  private readonly listeners = new Set<Listener>();
+  private seq: number;
+
+  constructor(now: () => number = Date.now) {
+    this.seq = Math.floor(now() / 1000) * 1_000_000;
+  }
+
+  get listenerCount(): number {
+    return this.listeners.size;
+  }
+
+  /** The sequence number of the latest event. */
+  get currentSeq(): number {
+    return this.seq;
+  }
+
+  /** Returns the function that removes the listener. */
+  subscribe(listener: Listener): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  publish(event: AppEvent): void {
+    const seq = ++this.seq;
+    for (const listener of this.listeners) {
+      try {
+        listener(event, seq);
+      } catch {
+        // One broken subscriber (a closed socket, say) must not stop the others.
+      }
+    }
+  }
+}

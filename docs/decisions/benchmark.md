@@ -1,6 +1,6 @@
 # Decision: speed benchmark and time estimates
 
-Status: proposed, the speed target needs the owner's confirmation (ANO-11, slice 6) · Code: `src/server/benchmark/` (measurement, runner, CLI), `src/server/speed/` (the model of each voice, learning, the estimator), `src/shared/estimate.ts` (the arithmetic, used by the server and the pages), migration 8.
+Status: proposed, the speed target needs the owner's confirmation (ANO-11, slice 6) · Code: `apps/api/src/benchmark/` (measurement, runner, CLI), `apps/api/src/speed/` (the model of each voice, learning, the estimator), `packages/contracts/src/estimate.ts` (the arithmetic, used by the server and the pages), migration 8.
 
 The spec (section 11) says there is no fixed speed target yet: M1 measures the engine's real-time factor on the owner's machine, shows an estimated time before each conversion, and the target is set from those numbers. This record is the method, the numbers measured here, and a proposed target.
 
@@ -24,7 +24,7 @@ N runs from 1 up to the most workers the settings allow, capped at 4, and also t
 
 1. **At startup**, once (and once more if the first run began while the 1-minute load average was above the number of cores, which is recorded with the result), when some default voice has no result for this engine, or its result is from another machine (CPU count or model) or from older text rules (`TEXT_PROCESSING_VERSION`). It waits for a moment when no chapter is being read and none is waiting (`WorkerPool.holdWhenIdle`), in the background, without blocking the API; a conversion that was running keeps going and the test starts after it.
 2. **Run benchmark** on the Settings page (`POST /api/benchmark`, **409** while one is running, `DELETE` cancels). The pool is held at once: the chapters being read finish, none starts, and the test starts when they are done.
-3. **`pnpm benchmark`** (`node dist/server/benchmark/cli.js`, also in the container) prints the tables below without touching the app's data. It asks the running app first and refuses while it is converting or testing (`--force` to override), because it would compete with it.
+3. **`pnpm benchmark`** (`node dist/benchmark/cli.js` in `apps/api`, also in the `core` container) prints the tables below without touching the app's data. It asks the running app first and refuses while it is converting or testing (`--force` to override), because it would compete with it.
 
 **The gate.** `PoolGate` (`convert/pool-gate.ts`) counts holds; workers claim no chapter while one is held, and a conversion queued meanwhile starts the moment the hold is released. A hold set while a chapter is running waits for it, never aborts it. A cancelled wait lifts the hold again. The startup run takes the hold only at an idle moment, decided in the same tick as the worker's "nothing to claim", so no chapter can slip in between. The startup run also waits while an M4B/ZIP build is running (`busyElsewhere`, with a check when the last build ends), and a start by hand while it is still waiting takes it over instead of being refused. While held, `GET /api/pool` and the `pool` event say `held: true` and the app shows "Measuring how fast this computer reads aloud".
 

@@ -1,0 +1,61 @@
+# The edge: one origin for the browser. `/api` goes to core, everything else to web.
+# The nginx image fills in the ${...} values from the environment when it starts (see Dockerfile).
+
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ""      "";
+}
+
+server {
+    listen 8080;
+    server_tokens off;
+
+    # Docker's DNS, asked again every 10 s, so a restarted web or core container is found at its new
+    # address. Upstreams named in variables are looked up at request time, not once at start.
+    resolver ${NGINX_LOCAL_RESOLVERS} valid=10s ipv6=off;
+    set $web http://${WEB_UPSTREAM};
+    set $core http://${CORE_UPSTREAM};
+
+    proxy_http_version 1.1;
+    # The browser's Host and Origin reach core unchanged, so its host and origin checks keep working.
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    # Hot reload of `pnpm dev` runs over a websocket.
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+
+    location / {
+        proxy_pass $web;
+    }
+
+    location ~ ^/api(/|$) {
+        # Uploads stream to core as they arrive. Core's own limit answers first, with a message the
+        # page can show; this one, 1 MB above MAX_UPLOAD_MB for the form around the file, is a backstop.
+        client_max_body_size ${NGINX_BODY_LIMIT};
+        error_page 413 = @too_large;
+        # Core is down or restarting: nginx's own answer, not one core sent (those pass through as they are).
+        error_page 502 503 504 = @core_unreachable;
+        proxy_request_buffering off;
+        # Responses stream too: live updates (/api/events) arrive at once, and big downloads are not
+        # spooled to disk here. Range requests and their 206 answers pass through untouched.
+        proxy_buffering off;
+        # A slow 200 MB upload, then parsing it, can go minutes without a byte; core allows 15 minutes.
+        client_body_timeout 15m;
+        proxy_send_timeout 15m;
+        proxy_read_timeout 15m;
+        proxy_pass $core;
+    }
+
+    # The same JSON core sends for a file over the limit, so the upload page can show the message.
+    location @too_large {
+        default_type application/json;
+        return 413 '{"error":"too_large","message":"The file is larger than the upload limit."}';
+    }
+
+    # JSON in the shape core uses, so the pages say what they said before the split: the server is not there.
+    location @core_unreachable {
+        default_type application/json;
+        return 502 '{"error":"unreachable","message":"Could not reach the server. Check that the app is still running."}';
+    }
+}

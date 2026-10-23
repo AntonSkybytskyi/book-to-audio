@@ -1,6 +1,6 @@
 # Decision: language detection and text rules for speech
 
-Status: accepted (ANO-14, slice 5) · Code: `src/server/books/language-*.ts` (detection), `src/server/text/` (rules and sentence splitting).
+Status: accepted (ANO-14, slice 5) · Code: `apps/api/src/books/language-*.ts` (detection), `apps/api/src/text/` (rules and sentence splitting).
 
 ## Language detection
 
@@ -56,7 +56,7 @@ The principle for every rule: **a wrong expansion is worse than none**. Where th
 | `№`, `/`, brackets, quotes | read or ignored | read or ignored | dropped | uk: `№` as "номер", brackets as commas, others become spaces |
 | Latin words in a Russian text | read in English, by espeak | | dropped | uk: spelled with Ukrainian letters |
 
-## Rules (`src/server/text/`)
+## Rules (`apps/api/src/text/`)
 
 Pure functions per paragraph (`prepareForSpeech(text, language)`), applied before the text is chunked. Everything is deterministic; `*.test.ts` next to each module lists inputs and outputs, and `golden/` has a table per language of the examples a native reader checked (`golden/*.ts`, run by `golden/golden.test.ts`).
 

@@ -12,15 +12,549 @@
     "builtin": true,
     "node": true
   },
-  "ignorePatterns": [".next/**", "dist/**", "data/**", "next-env.d.ts"],
+  "ignorePatterns": ["**/.next/**", "**/dist/**", "data/**", "**/next-env.d.ts"],
   "overrides": [
     {
-      "files": ["src/ui/**"],
+      "files": ["apps/api/*.{ts,tsx,mts,cts}"],
       "rules": {
         "no-restricted-imports": [
           "error",
           {
             "patterns": [
+              {
+                "group": [
+                  "@book-to-audio/web",
+                  "@book-to-audio/web/**",
+                  "@book-to-audio/api",
+                  "@book-to-audio/api/**"
+                ],
+                "message": "An app never imports another app. Move what both need into a package under packages/."
+              },
+              {
+                "group": ["../**"],
+                "message": "An app never imports another app, or anything outside its own folder. Move what both need into a package under packages/."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/*/*.{ts,tsx,mts,cts}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@book-to-audio/web",
+                  "@book-to-audio/web/**",
+                  "@book-to-audio/api",
+                  "@book-to-audio/api/**"
+                ],
+                "message": "An app never imports another app. Move what both need into a package under packages/."
+              },
+              {
+                "group": ["../**"],
+                "message": "An app never imports another app, or anything outside its own folder. Move what both need into a package under packages/."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["apps/api/*/*.{ts,tsx,mts,cts}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@book-to-audio/web",
+                  "@book-to-audio/web/**",
+                  "@book-to-audio/api",
+                  "@book-to-audio/api/**"
+                ],
+                "message": "An app never imports another app. Move what both need into a package under packages/."
+              },
+              {
+                "group": ["../../**"],
+                "message": "An app never imports another app, or anything outside its own folder. Move what both need into a package under packages/."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/*/*/*.{ts,tsx,mts,cts}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@book-to-audio/web",
+                  "@book-to-audio/web/**",
+                  "@book-to-audio/api",
+                  "@book-to-audio/api/**"
+                ],
+                "message": "An app never imports another app. Move what both need into a package under packages/."
+              },
+              {
+                "group": ["../../**"],
+                "message": "An app never imports another app, or anything outside its own folder. Move what both need into a package under packages/."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["apps/api/*/*/*.{ts,tsx,mts,cts}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@book-to-audio/web",
+                  "@book-to-audio/web/**",
+                  "@book-to-audio/api",
+                  "@book-to-audio/api/**"
+                ],
+                "message": "An app never imports another app. Move what both need into a package under packages/."
+              },
+              {
+                "group": ["../../../**"],
+                "message": "An app never imports another app, or anything outside its own folder. Move what both need into a package under packages/."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/*/*/*/*.{ts,tsx,mts,cts}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@book-to-audio/web",
+                  "@book-to-audio/web/**",
+                  "@book-to-audio/api",
+                  "@book-to-audio/api/**"
+                ],
+                "message": "An app never imports another app. Move what both need into a package under packages/."
+              },
+              {
+                "group": ["../../../**"],
+                "message": "An app never imports another app, or anything outside its own folder. Move what both need into a package under packages/."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["apps/api/*/*/*/*.{ts,tsx,mts,cts}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@book-to-audio/web",
+                  "@book-to-audio/web/**",
+                  "@book-to-audio/api",
+                  "@book-to-audio/api/**"
+                ],
+                "message": "An app never imports another app. Move what both need into a package under packages/."
+              },
+              {
+                "group": ["../../../../**"],
+                "message": "An app never imports another app, or anything outside its own folder. Move what both need into a package under packages/."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/*/*/*/*/*.{ts,tsx,mts,cts}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@book-to-audio/web",
+                  "@book-to-audio/web/**",
+                  "@book-to-audio/api",
+                  "@book-to-audio/api/**"
+                ],
+                "message": "An app never imports another app. Move what both need into a package under packages/."
+              },
+              {
+                "group": ["../../../../**"],
+                "message": "An app never imports another app, or anything outside its own folder. Move what both need into a package under packages/."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["apps/api/*/*/*/*/*.{ts,tsx,mts,cts}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@book-to-audio/web",
+                  "@book-to-audio/web/**",
+                  "@book-to-audio/api",
+                  "@book-to-audio/api/**"
+                ],
+                "message": "An app never imports another app. Move what both need into a package under packages/."
+              },
+              {
+                "group": ["../../../../../**"],
+                "message": "An app never imports another app, or anything outside its own folder. Move what both need into a package under packages/."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/*/*/*/*/*/*.{ts,tsx,mts,cts}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@book-to-audio/web",
+                  "@book-to-audio/web/**",
+                  "@book-to-audio/api",
+                  "@book-to-audio/api/**"
+                ],
+                "message": "An app never imports another app. Move what both need into a package under packages/."
+              },
+              {
+                "group": ["../../../../../**"],
+                "message": "An app never imports another app, or anything outside its own folder. Move what both need into a package under packages/."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["apps/api/*/*/*/*/*/*.{ts,tsx,mts,cts}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@book-to-audio/web",
+                  "@book-to-audio/web/**",
+                  "@book-to-audio/api",
+                  "@book-to-audio/api/**"
+                ],
+                "message": "An app never imports another app. Move what both need into a package under packages/."
+              },
+              {
+                "group": ["../../../../../../**"],
+                "message": "An app never imports another app, or anything outside its own folder. Move what both need into a package under packages/."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/*/*/*/*/*/*/*.{ts,tsx,mts,cts}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@book-to-audio/web",
+                  "@book-to-audio/web/**",
+                  "@book-to-audio/api",
+                  "@book-to-audio/api/**"
+                ],
+                "message": "An app never imports another app. Move what both need into a package under packages/."
+              },
+              {
+                "group": ["../../../../../../**"],
+                "message": "An app never imports another app, or anything outside its own folder. Move what both need into a package under packages/."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["apps/api/*/*/*/*/*/*/*.{ts,tsx,mts,cts}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@book-to-audio/web",
+                  "@book-to-audio/web/**",
+                  "@book-to-audio/api",
+                  "@book-to-audio/api/**"
+                ],
+                "message": "An app never imports another app. Move what both need into a package under packages/."
+              },
+              {
+                "group": ["../../../../../../../**"],
+                "message": "An app never imports another app, or anything outside its own folder. Move what both need into a package under packages/."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/*/*/*/*/*/*/*/*.{ts,tsx,mts,cts}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@book-to-audio/web",
+                  "@book-to-audio/web/**",
+                  "@book-to-audio/api",
+                  "@book-to-audio/api/**"
+                ],
+                "message": "An app never imports another app. Move what both need into a package under packages/."
+              },
+              {
+                "group": ["../../../../../../../**"],
+                "message": "An app never imports another app, or anything outside its own folder. Move what both need into a package under packages/."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["apps/api/*/*/*/*/*/*/*/*.{ts,tsx,mts,cts}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@book-to-audio/web",
+                  "@book-to-audio/web/**",
+                  "@book-to-audio/api",
+                  "@book-to-audio/api/**"
+                ],
+                "message": "An app never imports another app. Move what both need into a package under packages/."
+              },
+              {
+                "group": ["../../../../../../../../**"],
+                "message": "An app never imports another app, or anything outside its own folder. Move what both need into a package under packages/."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/*/*/*/*/*/*/*/*/*.{ts,tsx,mts,cts}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@book-to-audio/web",
+                  "@book-to-audio/web/**",
+                  "@book-to-audio/api",
+                  "@book-to-audio/api/**"
+                ],
+                "message": "An app never imports another app. Move what both need into a package under packages/."
+              },
+              {
+                "group": ["../../../../../../../../**"],
+                "message": "An app never imports another app, or anything outside its own folder. Move what both need into a package under packages/."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["apps/api/*/*/*/*/*/*/*/*/*.{ts,tsx,mts,cts}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@book-to-audio/web",
+                  "@book-to-audio/web/**",
+                  "@book-to-audio/api",
+                  "@book-to-audio/api/**"
+                ],
+                "message": "An app never imports another app. Move what both need into a package under packages/."
+              },
+              {
+                "group": ["../../../../../../../../../**"],
+                "message": "An app never imports another app, or anything outside its own folder. Move what both need into a package under packages/."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/*/*/*/*/*/*/*/*/*/*.{ts,tsx,mts,cts}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@book-to-audio/web",
+                  "@book-to-audio/web/**",
+                  "@book-to-audio/api",
+                  "@book-to-audio/api/**"
+                ],
+                "message": "An app never imports another app. Move what both need into a package under packages/."
+              },
+              {
+                "group": ["../../../../../../../../../**"],
+                "message": "An app never imports another app, or anything outside its own folder. Move what both need into a package under packages/."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["apps/api/*/*/*/*/*/*/*/*/*/*.{ts,tsx,mts,cts}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@book-to-audio/web",
+                  "@book-to-audio/web/**",
+                  "@book-to-audio/api",
+                  "@book-to-audio/api/**"
+                ],
+                "message": "An app never imports another app. Move what both need into a package under packages/."
+              },
+              {
+                "group": ["../../../../../../../../../../**"],
+                "message": "An app never imports another app, or anything outside its own folder. Move what both need into a package under packages/."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/*/*/*/*/*/*/*/*/*/*/*.{ts,tsx,mts,cts}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@book-to-audio/web",
+                  "@book-to-audio/web/**",
+                  "@book-to-audio/api",
+                  "@book-to-audio/api/**"
+                ],
+                "message": "An app never imports another app. Move what both need into a package under packages/."
+              },
+              {
+                "group": ["../../../../../../../../../../**"],
+                "message": "An app never imports another app, or anything outside its own folder. Move what both need into a package under packages/."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["apps/web/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@book-to-audio/web",
+                  "@book-to-audio/web/**",
+                  "@book-to-audio/api",
+                  "@book-to-audio/api/**"
+                ],
+                "message": "An app never imports another app. Move what both need into a package under packages/."
+              },
+              {
+                "group": ["../**"],
+                "message": "Import across folders through the @/ alias; it never leads out of the web app."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["apps/web/ui/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@book-to-audio/web",
+                  "@book-to-audio/web/**",
+                  "@book-to-audio/api",
+                  "@book-to-audio/api/**"
+                ],
+                "message": "An app never imports another app. Move what both need into a package under packages/."
+              },
               {
                 "group": ["../**"],
                 "message": "Import across folders through the @/ui alias, and only down the layers."
@@ -35,12 +569,21 @@
       }
     },
     {
-      "files": ["src/ui/shared/**"],
+      "files": ["apps/web/ui/shared/**"],
       "rules": {
         "no-restricted-imports": [
           "error",
           {
             "patterns": [
+              {
+                "group": [
+                  "@book-to-audio/web",
+                  "@book-to-audio/web/**",
+                  "@book-to-audio/api",
+                  "@book-to-audio/api/**"
+                ],
+                "message": "An app never imports another app. Move what both need into a package under packages/."
+              },
               {
                 "group": ["../**"],
                 "message": "Import across folders through the @/ui alias, and only down the layers."
@@ -63,12 +606,21 @@
       }
     },
     {
-      "files": ["src/ui/entities/**"],
+      "files": ["apps/web/ui/entities/**"],
       "rules": {
         "no-restricted-imports": [
           "error",
           {
             "patterns": [
+              {
+                "group": [
+                  "@book-to-audio/web",
+                  "@book-to-audio/web/**",
+                  "@book-to-audio/api",
+                  "@book-to-audio/api/**"
+                ],
+                "message": "An app never imports another app. Move what both need into a package under packages/."
+              },
               {
                 "group": ["../**"],
                 "message": "Import across folders through the @/ui alias, and only down the layers."
@@ -87,12 +639,21 @@
       }
     },
     {
-      "files": ["src/ui/features/**"],
+      "files": ["apps/web/ui/features/**"],
       "rules": {
         "no-restricted-imports": [
           "error",
           {
             "patterns": [
+              {
+                "group": [
+                  "@book-to-audio/web",
+                  "@book-to-audio/web/**",
+                  "@book-to-audio/api",
+                  "@book-to-audio/api/**"
+                ],
+                "message": "An app never imports another app. Move what both need into a package under packages/."
+              },
               {
                 "group": ["../**"],
                 "message": "Import across folders through the @/ui alias, and only down the layers."

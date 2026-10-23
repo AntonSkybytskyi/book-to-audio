@@ -105,7 +105,7 @@ And it implements one operation: synthesize a chunk of text with a given voice a
 
 **Role of the local engine.** The local engine is mainly for building and testing the MVP: it is free, fast to iterate with and needs no API keys. After the MVP, a cloud TTS engine is expected to become the main engine for real listening, since voice quality matters more than cost for the owner.
 
-v1 ships with one local engine that is free and works offline. It must have usable voices for English, Ukrainian and Russian. **Piper** is the proposed default, since it has voices for all three languages and runs on CPU. It runs as a separate process inside the Docker image and is called from the Node backend.
+v1 ships with one local engine that is free and works offline. It must have usable voices for English, Ukrainian and Russian. **Piper** is the proposed default, since it has voices for all three languages and runs on CPU. It runs as a separate process inside the core's Docker image and is called from the Node backend.
 
 **v1 is strictly TypeScript.** The app has no services written in other languages: an engine is either a Node library (for example an ONNX model run in Node) or a prebuilt binary started as a child process. Engines that need a Python or other runtime as a separate service are not used in v1. The engine interface is designed so such a service can be added later without changing the rest of the app, and the known trade-off is that v1 voice quality, especially for Ukrainian, is limited to what Piper and similar engines offer.
 
@@ -159,13 +159,13 @@ Audio is encoded with ffmpeg. Default quality: mono, 32 kbps Opus for chapter We
 
 TypeScript end to end.
 
-- **App:** one Node.js process. Fastify serves the HTTP API under `/api` (uploads, jobs, downloads) and hands every other request to Next.js (App Router, React), hosted inside Fastify as a custom server.
+- **App:** two Node.js services behind nginx, which is the only published port and keeps one origin for the browser. The core (Fastify) serves the HTTP API under `/api` (uploads, jobs, downloads, live updates); the web app (Next.js App Router, React, built as a standalone server) serves the pages, which load all their data from the API in the browser. Restarting the web app does not interrupt a conversion.
 - **Database:** SQLite through `better-sqlite3`, with numbered migrations applied at startup.
 - **Workers:** a scheduler in the backend process takes chapter tasks from the global pool and runs N TTS engine processes (section 9).
 - **Parsing:** an EPUB library or an in-house parser (decided in the M1 parsing ticket), and `pdfjs-dist` for PDF text and outline.
-- **TTS:** Piper binary and voice models in the Docker image, called as a child process.
+- **TTS:** Piper binary and voice models in the core's Docker image, called as a child process.
 - **Audio:** ffmpeg for encoding, joining chunks and writing chapters and tags.
-- **Packaging:** a single Docker image plus `docker-compose.yml` with a data volume.
+- **Packaging:** one Docker image each for nginx, the web app and the core, run by `docker-compose.yml`; the data volume belongs to the core.
 
 Exact libraries are chosen during implementation.
 

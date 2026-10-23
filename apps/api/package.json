@@ -1,0 +1,29 @@
+{
+  "name": "@book-to-audio/api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Core API: books, conversion, downloads and live updates",
+  "type": "module",
+  "scripts": {
+    "dev": "PORT=${CORE_PORT:-3002} DATA_DIR=${DATA_DIR:-../../data} tsx scripts/dev.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/index.js",
+    "benchmark": "node dist/benchmark/cli.js",
+    "fixtures": "tsx scripts/make-fixtures.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@book-to-audio/contracts": "workspace:*",
+    "@fastify/multipart": "10.1.4",
+    "better-sqlite3": "13.0.3",
+    "fastify": "5.12.7",
+    "htmlparser2": "12.0.0",
+    "jszip": "3.10.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^24.19.2",
+    "tsx": "^4.23.15",
+    "typescript": "6.0.3"
+  }
+}
