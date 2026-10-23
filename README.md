@@ -84,7 +84,7 @@ pnpm check         # all of the above
 
 The same checks run in the container with `docker compose run --rm check`.
 
-CI (`.github/workflows/ci.yml`) runs lint, format check, typecheck, tests, build and a build of every Docker image (not pushed) on every pull request and every push to `main`. The code checks are steps of one `check` job and all run even when one fails; the images are built by the `docker (api)`, `docker (web)` and `docker (edge)` jobs, and `edge-smoke` starts the nginx image between stub upstreams and checks its routing, headers, upload limit and answer while core is down (`apps/edge/smoke-test.sh`, also runnable locally).
+CI (`.github/workflows/ci.yml`) runs lint, format check, typecheck, tests, build and a build of every Docker image (not pushed) on every pull request and every push to `main`. The code checks are steps of one `check` job and all run even when one fails; the images are built by the `docker (api)`, `docker (web)`, `docker (edge)` and `docker (piper-api)` jobs, and `edge-smoke` starts the nginx image between stub upstreams and checks its routing, headers, upload limit and answer while core is down (`apps/edge/smoke-test.sh`, also runnable locally).
 
 Making these checks required before a PR can be merged into `main` needs a public repo or GitHub Pro. Once that is in place:
 
@@ -93,7 +93,14 @@ gh api -X PUT repos/AntonSkybytskyi/book-to-audio/branches/main/protection --inp
 {
   "required_status_checks": {
     "strict": false,
-    "contexts": ["check", "docker (api)", "docker (web)", "docker (edge)", "edge-smoke"]
+    "contexts": [
+      "check",
+      "docker (api)",
+      "docker (web)",
+      "docker (edge)",
+      "docker (piper-api)",
+      "edge-smoke"
+    ]
   },
   "enforce_admins": true,
   "required_pull_request_reviews": null,

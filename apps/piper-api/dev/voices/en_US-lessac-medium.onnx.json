@@ -1,0 +1,5 @@
+{
+  "audio": { "sample_rate": 22050 },
+  "language": { "family": "en", "code": "en_US" },
+  "num_speakers": 1
+}

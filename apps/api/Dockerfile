@@ -19,6 +19,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 COPY apps/edge/package.json apps/edge/
+COPY apps/piper-api/package.json apps/piper-api/
 COPY packages/contracts/package.json packages/contracts/
 
 # Only this app and the packages it uses.

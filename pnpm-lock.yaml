@@ -65,6 +65,25 @@ importers:
 
   apps/edge: {}
 
+  apps/piper-api:
+    dependencies:
+      '@book-to-audio/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      fastify:
+        specifier: 5.12.7
+        version: 5.12.7
+    devDependencies:
+      '@types/node':
+        specifier: ^24.19.2
+        version: 24.19.2
+      tsx:
+        specifier: ^4.23.15
+        version: 4.23.15
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+
   apps/web:
     dependencies:
       '@book-to-audio/contracts':

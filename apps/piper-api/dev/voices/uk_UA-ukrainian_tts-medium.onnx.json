@@ -1,0 +1,6 @@
+{
+  "audio": { "sample_rate": 22050 },
+  "language": { "family": "uk", "code": "uk_UA" },
+  "num_speakers": 3,
+  "speaker_id_map": { "lada": 0, "mykyta": 1, "tetiana": 2 }
+}
