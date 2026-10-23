@@ -48,6 +48,8 @@ async function startDownload(url: string): Promise<"started" | "changed" | "unre
   } catch {
     return "unreachable";
   }
+  // 5xx: core is down or failing (nginx answers 502 while it restarts), not a change of the files.
+  if (res.status >= 500) return "unreachable";
   if (!res.ok) return "changed";
   const link = document.createElement("a");
   link.href = url;

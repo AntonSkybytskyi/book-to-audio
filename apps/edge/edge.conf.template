@@ -34,6 +34,8 @@ server {
         # page can show; this one, 1 MB above MAX_UPLOAD_MB for the form around the file, is a backstop.
         client_max_body_size ${NGINX_BODY_LIMIT};
         error_page 413 = @too_large;
+        # Core is down or restarting: nginx's own answer, not one core sent (those pass through as they are).
+        error_page 502 503 504 = @core_unreachable;
         proxy_request_buffering off;
         # Responses stream too: live updates (/api/events) arrive at once, and big downloads are not
         # spooled to disk here. Range requests and their 206 answers pass through untouched.
@@ -49,5 +51,11 @@ server {
     location @too_large {
         default_type application/json;
         return 413 '{"error":"too_large","message":"The file is larger than the upload limit."}';
+    }
+
+    # JSON in the shape core uses, so the pages say what they said before the split: the server is not there.
+    location @core_unreachable {
+        default_type application/json;
+        return 502 '{"error":"unreachable","message":"Could not reach the server. Check that the app is still running."}';
     }
 }
