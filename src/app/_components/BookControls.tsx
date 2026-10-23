@@ -2,12 +2,10 @@
 
 import { useState } from "react";
 import { pauseBook, regenerateBook, resumeBook, type Book } from "../_lib/api";
-import { cx } from "../_lib/cx";
 import { pluralize } from "../_lib/format";
 import { useAction } from "../_lib/use-action";
-import styles from "./BookControls.module.css";
+import { Button } from "./Button";
 import { ConfirmDialog } from "./ConfirmDialog";
-import shared from "./shared.module.css";
 
 interface Props {
   book: Book;
@@ -39,34 +37,27 @@ export function BookControls({ book, onChanged, onDelete }: Props) {
   };
 
   return (
-    <section className={styles.controls} aria-label="Book controls">
-      <div className={styles.buttons}>
+    <section className="mb-6 grid gap-[0.4rem]" aria-label="Book controls">
+      <div className="flex flex-wrap gap-[0.6rem]">
         {canToggle && (
-          <button
-            type="button"
-            className={cx(shared.button, shared.small)}
-            disabled={toggle.busy}
-            onClick={flip}
-          >
+          <Button size="small" disabled={toggle.busy} onClick={flip}>
             {paused ? "Resume this book" : "Pause this book"}
-          </button>
+          </Button>
         )}
-        <button
-          type="button"
-          className={cx(shared.button, shared.small, shared.outline)}
-          onClick={() => setConfirming(true)}
-        >
+        <Button size="small" variant="outline" onClick={() => setConfirming(true)}>
           Regenerate book
-        </button>
-        <button
-          type="button"
-          className={cx(shared.button, shared.small, shared.outlineDanger, styles.delete)}
+        </Button>
+        {/* Kept apart from the safe actions, at the far end. */}
+        <Button
+          size="small"
+          variant="outlineDanger"
+          className="ml-auto max-sm:ml-0"
           onClick={onDelete}
         >
           Delete book
-        </button>
+        </Button>
       </div>
-      <p className={cx(shared.error, styles.error)} role="alert">
+      <p className="text-[0.9rem] text-danger" role="alert">
         {toggle.error}
       </p>
 

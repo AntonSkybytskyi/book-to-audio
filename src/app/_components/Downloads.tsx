@@ -7,9 +7,8 @@ import { downloadsState } from "../_lib/downloads";
 import { formatLeft, secondsLeft, type ProgressSample } from "../_lib/eta";
 import { formatBytes } from "../_lib/format";
 import { useAction } from "../_lib/use-action";
-import styles from "./Downloads.module.css";
+import { Button } from "./Button";
 import { ProgressBar } from "./ProgressBar";
-import shared from "./shared.module.css";
 
 interface Props {
   book: Book;
@@ -110,54 +109,63 @@ export function Downloads({ book, onChanged }: Props) {
   return (
     <section
       className={cx(
-        styles.downloads,
+        "mb-6 grid gap-[0.85rem] border border-rule bg-paper-raised px-[1.1rem] pt-4 pb-[1.1rem]",
+        // The same red edge a failed chapter row has.
         (state.kind === "failed" || (state.kind === "ready" && state.rebuild?.kind === "failed")) &&
-          styles.failed,
+          "border-l-[0.25rem] border-l-danger",
       )}
       aria-labelledby="downloads-title"
       aria-busy={building}
     >
-      <h2 id="downloads-title" className={styles.heading}>
+      <h2 id="downloads-title" className="font-serif text-[1.15rem] leading-[1.3] font-semibold">
         Downloads
       </h2>
 
-      <ul className={styles.files}>
+      <ul className="flex flex-wrap gap-x-6 gap-y-[0.85rem] max-sm:grid">
         {FILES.map(({ kind, label: name, about }) => (
-          <li key={kind} className={styles.file}>
+          <li
+            key={kind}
+            className="grid min-w-0 justify-items-start gap-[0.3rem] max-sm:justify-items-stretch"
+          >
             {sizes ? (
-              <a
+              // Not prefetched: the link is a file download, not a page.
+              <Button
                 href={downloadUrl(book.id, kind)}
+                prefetch={false}
                 download
-                onClick={(event) => void download(event, kind)}
-                className={cx(shared.button, shared.small, kind === "zip" && shared.outline)}
+                onClick={(event: MouseEvent<HTMLAnchorElement>) => void download(event, kind)}
+                size="small"
+                variant={kind === "zip" ? "outline" : "primary"}
               >
                 <span>{name}</span>
-                <span className={styles.size}>{formatBytes(sizes[kind])}</span>
-              </a>
+                <span className="font-normal tabular-nums opacity-85">
+                  {formatBytes(sizes[kind])}
+                </span>
+              </Button>
             ) : (
-              <button
-                type="button"
-                disabled
-                className={cx(shared.button, shared.small, styles.unavailable)}
-              >
+              <Button disabled size="small" variant="unavailable">
                 {name}
-              </button>
+              </Button>
             )}
-            <span className={styles.about}>{about}</span>
+            <span className="text-[0.8rem] text-ink-muted">{about}</span>
           </li>
         ))}
       </ul>
 
       {building && (
-        <div className={styles.status}>
-          <p role="status" aria-live="polite" className={styles.line}>
+        <div className="grid gap-2">
+          <p
+            role="status"
+            aria-live="polite"
+            className="flex flex-wrap items-baseline gap-x-3 gap-y-1"
+          >
             <span>{label}</span>
             {!starting && progress !== null && (
-              <span className={styles.percent} aria-hidden="true">
+              <span className="font-semibold text-accent tabular-nums" aria-hidden="true">
                 {percent(progress)}
               </span>
             )}
-            {timeLeft && <span className={styles.left}>{timeLeft}</span>}
+            {timeLeft && <span className="text-[0.9rem] text-ink-muted">{timeLeft}</span>}
           </p>
           <ProgressBar
             thin
@@ -169,34 +177,29 @@ export function Downloads({ book, onChanged }: Props) {
       )}
 
       {state.kind === "waiting" && (
-        <p className={styles.muted} role="status">
+        <p className="text-[0.95rem] text-ink-muted" role="status">
           {state.message}
         </p>
       )}
 
       {(state.kind === "failed" ||
         (state.kind === "ready" && state.rebuild?.kind === "failed")) && (
-        <div className={styles.status}>
-          <p className={shared.error} role="alert">
+        <div className="grid gap-2">
+          <p className="text-danger" role="alert">
             {state.kind === "failed"
               ? state.error
               : `The last rebuild failed, these files are still good. ${state.rebuild?.kind === "failed" ? state.rebuild.error : ""}`}
           </p>
           <div>
-            <button
-              type="button"
-              className={cx(shared.button, shared.small)}
-              disabled={retry.busy}
-              onClick={rebuild}
-            >
+            <Button size="small" disabled={retry.busy} onClick={rebuild}>
               {retry.busy ? "Starting…" : "Retry"}
-            </button>
+            </Button>
           </div>
         </div>
       )}
 
       {(retry.error || notice) && (
-        <p className={shared.error} role="alert">
+        <p className="text-danger" role="alert">
           {retry.error ?? notice}
         </p>
       )}

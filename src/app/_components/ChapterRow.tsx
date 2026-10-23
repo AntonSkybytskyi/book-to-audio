@@ -11,9 +11,8 @@ import {
 import { cx } from "../_lib/cx";
 import { formatClock } from "../_lib/format";
 import { useAction } from "../_lib/use-action";
+import { Button } from "./Button";
 import { ProgressBar } from "./ProgressBar";
-import styles from "./ChapterRow.module.css";
-import shared from "./shared.module.css";
 
 interface Props {
   chapter: Chapter;
@@ -28,6 +27,13 @@ interface Props {
   onConfirmRegenerate: (position: number) => void;
 }
 
+const ROW =
+  "grid grid-cols-[2.75rem_1fr_auto] items-center gap-3 border-b border-rule px-2 py-3 transition-[background-color] duration-200 ease-[ease] max-sm:grid-cols-[2.75rem_1fr]";
+const TITLE = "font-serif text-[1.05rem] leading-[1.35] wrap-anywhere";
+const MUTED = "text-ink-muted";
+const WORKING = "font-semibold text-accent";
+const ERROR_TEXT = "text-[0.85rem] text-danger wrap-anywhere";
+
 function Status({ chapter, bookPaused }: { chapter: Chapter; bookPaused: boolean }) {
   const again = isRegenerating(chapter);
   switch (chapter.status) {
@@ -36,24 +42,24 @@ function Status({ chapter, bookPaused }: { chapter: Chapter; bookPaused: boolean
     case "queued":
       if (again) {
         return (
-          <span className={styles.working}>
+          <span className={WORKING}>
             {bookPaused ? "Regenerating · on hold" : "Regenerating · waiting"}
           </span>
         );
       }
-      return <span className={styles.muted}>{bookPaused ? "On hold" : "Waiting"}</span>;
+      return <span className={MUTED}>{bookPaused ? "On hold" : "Waiting"}</span>;
     case "generating":
       // Every chunk is read; what is left is joining them into the chapter's file.
-      if (isFinishing(chapter)) return <span className={styles.working}>Finishing…</span>;
+      if (isFinishing(chapter)) return <span className={WORKING}>Finishing…</span>;
       return (
-        <span className={styles.working}>
+        <span className={WORKING}>
           {again ? "Regenerating" : "Reading aloud"} {Math.round(chapter.progress * 100)}%
         </span>
       );
     case "done":
-      return <span className={styles.muted}>{formatClock(chapter.durationSeconds ?? 0)}</span>;
+      return <span className={MUTED}>{formatClock(chapter.durationSeconds ?? 0)}</span>;
     case "failed":
-      return <span className={styles.failed}>Failed</span>;
+      return <span className="font-semibold text-danger">Failed</span>;
   }
 }
 
@@ -72,11 +78,14 @@ export function ChapterRow({
 
   if (chapter.status === "pending") {
     return (
-      <li className={styles.row}>
-        <span className={styles.badge} aria-hidden="true">
+      <li className={ROW}>
+        <span
+          className="grid w-11 place-items-center text-ink-muted tabular-nums"
+          aria-hidden="true"
+        >
           {chapter.position}
         </span>
-        <p className={styles.title}>{chapter.title}</p>
+        <p className={TITLE}>{chapter.title}</p>
       </li>
     );
   }
@@ -88,10 +97,18 @@ export function ChapterRow({
       : void regenerate.run(() => onRegenerate(chapter.position));
 
   return (
-    <li className={cx(styles.row, current && styles.current, failed && styles.failedRow)}>
+    <li
+      className={cx(
+        ROW,
+        failed ? "border-l-[0.25rem] border-l-danger bg-paper-raised" : current && "bg-accent-soft",
+      )}
+    >
       <button
         type="button"
-        className={cx(styles.play, playing && styles.playing)}
+        className={cx(
+          "grid size-11 cursor-pointer place-items-center rounded-full border border-accent transition-[background-color,color,opacity] duration-150 ease-[ease] enabled-hover:bg-accent enabled-hover:text-accent-ink disabled:cursor-not-allowed disabled:border-rule disabled:text-ink-muted disabled:opacity-60",
+          playing ? "bg-accent text-accent-ink" : "bg-transparent text-accent",
+        )}
         disabled={!playable}
         aria-label={playable ? label : `Chapter ${chapter.position} is not ready to play`}
         aria-pressed={playable ? playing : undefined}
@@ -106,9 +123,9 @@ export function ChapterRow({
         </svg>
       </button>
 
-      <div className={styles.body}>
-        <p className={styles.title}>
-          <span className={styles.number}>{chapter.position}.</span> {chapter.title}
+      <div className="grid min-w-0 gap-[0.35rem]">
+        <p className={TITLE}>
+          <span className="text-ink-muted tabular-nums">{chapter.position}.</span> {chapter.title}
         </p>
         {chapter.status === "generating" && (
           <ProgressBar
@@ -118,40 +135,39 @@ export function ChapterRow({
             label={`Chapter ${chapter.position} progress`}
           />
         )}
-        {failed && chapter.error && <p className={styles.errorText}>{chapter.error}</p>}
+        {failed && chapter.error && <p className={ERROR_TEXT}>{chapter.error}</p>}
         {chapter.status === "done" && chapter.regenError && (
-          <p className={styles.errorText} role="status">
+          <p className={ERROR_TEXT} role="status">
             Regeneration failed: {chapter.regenError} The previous audio was kept.
           </p>
         )}
         {failed && chapter.hasAudio && (
-          <p className={styles.note}>The previous audio of this chapter can still be played.</p>
+          <p className="text-[0.85rem] text-ink-muted">
+            The previous audio of this chapter can still be played.
+          </p>
         )}
         {canRegenerate(chapter) && (
-          <div className={styles.actions}>
-            <button
-              type="button"
-              className={cx(
-                shared.button,
-                shared.small,
-                failed ? styles.retry : cx(shared.outline, styles.quietAction),
-              )}
+          <div className="mt-[0.15rem] flex">
+            {/* A failed chapter's button is the filled one: it is what the row is waiting for. */}
+            <Button
+              size={failed ? "smallTall" : "small"}
+              variant={failed ? "primary" : "muted"}
               aria-label={regenerateLabel(chapter)}
               disabled={regenerate.busy}
               onClick={click}
             >
               {regenerate.busy ? "Starting…" : "Regenerate"}
-            </button>
+            </Button>
           </div>
         )}
         {regenerate.error && (
-          <p className={shared.error} role="alert">
+          <p className="text-danger" role="alert">
             {regenerate.error}
           </p>
         )}
       </div>
 
-      <div className={styles.status}>
+      <div className="text-right text-[0.85rem] whitespace-nowrap tabular-nums max-sm:col-[2] max-sm:-mt-2 max-sm:text-left">
         <Status chapter={chapter} bookPaused={bookPaused} />
       </div>
     </li>

@@ -1,86 +1,94 @@
-:root {
-  --paper: #f5efe3;
-  --paper-raised: #fbf7ee;
-  --ink: #231f1a;
-  --ink-muted: #6b6256;
-  --rule: #ddd3c0;
-  --accent: #8a3b1f;
-  --accent-ink: #fff8ec;
-  --accent-soft: #ecd9c6;
-  --danger: #9b1c1c;
+@import "tailwindcss";
+
+@theme {
+  --color-paper: #f5efe3;
+  --color-paper-raised: #fbf7ee;
+  --color-ink: #231f1a;
+  --color-ink-muted: #6b6256;
+  --color-rule: #ddd3c0;
+  --color-accent: #8a3b1f;
+  --color-accent-ink: #fff8ec;
+  --color-accent-soft: #ecd9c6;
+  --color-danger: #9b1c1c;
 
   --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
   --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
 
-  --column: 44rem;
-  --gutter: 1.25rem;
-  --radius: 4px;
+  --container-column: 44rem;
+  --spacing-gutter: 1.25rem;
+  --radius-base: 4px;
 
-  color-scheme: light dark;
-}
+  /* Full but not finished: a progress bar that pulses instead of sitting at 100%. */
+  --animate-pulse-busy: pulse-busy 1.2s ease-in-out infinite;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #1a1612;
-    --paper-raised: #231e18;
-    --ink: #ece4d4;
-    --ink-muted: #a79d8c;
-    --rule: #3a3329;
-    --accent: #e59b73;
-    --accent-ink: #1a1612;
-    --accent-soft: #3d2c20;
-    --danger: #f08a7a;
+  @keyframes pulse-busy {
+    50% {
+      opacity: 0.45;
+    }
   }
 }
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
+/* Hover on a control that can be used: not disabled, and not aria-disabled either. */
+@custom-variant enabled-hover {
+  @media (hover: hover) {
+    &:hover:not(:disabled, [aria-disabled="true"]) {
+      @slot;
+    }
+  }
 }
 
-html {
-  -webkit-text-size-adjust: 100%;
-}
+@layer base {
+  :root {
+    color-scheme: light dark;
+  }
 
-body {
-  margin: 0;
-  background: var(--paper);
-  color: var(--ink);
-  font-family: var(--font-sans);
-  font-size: 1rem;
-  line-height: 1.6;
-}
+  /* Dark mode changes the token values, so every utility that uses a color follows it. */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --color-paper: #1a1612;
+      --color-paper-raised: #231e18;
+      --color-ink: #ece4d4;
+      --color-ink-muted: #a79d8c;
+      --color-rule: #3a3329;
+      --color-accent: #e59b73;
+      --color-accent-ink: #1a1612;
+      --color-accent-soft: #3d2c20;
+      --color-danger: #f08a7a;
+    }
+  }
 
-h1,
-h2,
-h3,
-p {
-  margin: 0;
-}
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    line-height: 1.6;
+  }
 
-a {
-  color: var(--accent);
-  text-underline-offset: 0.2em;
-}
+  /* Preflight makes headings plain text; without a weight of their own they stay bold, as in the browser. */
+  h1,
+  h2,
+  h3 {
+    font-weight: bold;
+  }
 
-button,
-input,
-select {
-  font: inherit;
-  color: inherit;
-}
+  a {
+    color: var(--color-accent);
+    text-decoration-line: underline;
+    text-underline-offset: 0.2em;
+  }
 
-:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
-}
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 3px;
+  }
 
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }

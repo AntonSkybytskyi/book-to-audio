@@ -1,5 +1,4 @@
 import { cx } from "../_lib/cx";
-import styles from "./ProgressBar.module.css";
 
 interface Props {
   /** 0 to 1. */
@@ -14,14 +13,20 @@ export function ProgressBar({ value, label, thin, busy }: Props) {
   const percent = Math.round(Math.min(1, Math.max(0, value)) * 100);
   return (
     <div
-      className={cx(styles.track, thin && styles.thin, busy && styles.busy)}
+      className={cx("overflow-hidden rounded-full bg-rule", thin ? "h-1" : "h-2")}
       role="progressbar"
       aria-label={label}
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={percent}
     >
-      <div className={styles.fill} style={{ width: `${percent}%` }} />
+      <div
+        className={cx(
+          "h-full rounded-[inherit] bg-accent transition-[width] duration-600 ease-[ease]",
+          busy && "animate-pulse-busy",
+        )}
+        style={{ width: `${percent}%` }}
+      />
     </div>
   );
 }

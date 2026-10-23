@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, type ReactNode } from "react";
-import { cx } from "../_lib/cx";
-import styles from "./ConfirmDialog.module.css";
-import shared from "./shared.module.css";
+import { Button } from "./Button";
 
 interface Props {
   open: boolean;
@@ -67,7 +65,7 @@ export function ConfirmDialog({
   return (
     <dialog
       ref={dialog}
-      className={styles.dialog}
+      className="m-auto w-[min(28rem,calc(100vw-2rem))] rounded-base border border-rule bg-paper-raised p-0 text-ink shadow-[0_1.5rem_3rem_rgb(0_0_0/0.25)] backdrop:bg-[rgb(20_15_10/0.55)]"
       aria-labelledby={titleId}
       aria-describedby={bodyId}
       onCancel={(event) => {
@@ -79,34 +77,26 @@ export function ConfirmDialog({
         if (event.target === event.currentTarget && !busy) onCancel();
       }}
     >
-      <div className={styles.content}>
-        <h2 id={titleId} className={styles.title}>
+      <div className="grid gap-[0.9rem] p-6">
+        <h2
+          id={titleId}
+          className="font-serif text-[1.35rem] leading-[1.25] font-semibold wrap-anywhere"
+        >
           {title}
         </h2>
-        <div id={bodyId} className={styles.body}>
+        <div id={bodyId} className="grid gap-[0.6rem] text-[0.95rem] text-ink-muted wrap-anywhere">
           {children}
         </div>
-        <p className={shared.error} role="alert">
+        <p className="text-danger" role="alert">
           {error}
         </p>
-        <div className={styles.actions}>
-          <button
-            ref={cancel}
-            type="button"
-            className={cx(shared.button, shared.quiet)}
-            disabled={busy}
-            onClick={onCancel}
-          >
+        <div className="flex flex-wrap justify-end gap-3 max-sm:*:flex-[1_1_100%]">
+          <Button ref={cancel} variant="outline" disabled={busy} onClick={onCancel}>
             Cancel
-          </button>
-          <button
-            type="button"
-            className={cx(shared.button, danger && shared.danger)}
-            disabled={busy}
-            onClick={onConfirm}
-          >
+          </Button>
+          <Button variant={danger ? "danger" : "primary"} disabled={busy} onClick={onConfirm}>
             {busy ? busyLabel : confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </dialog>
