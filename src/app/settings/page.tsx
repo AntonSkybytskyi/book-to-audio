@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { SettingsView } from "../_components/SettingsView";
+import { SettingsView } from "@/ui/features/settings/SettingsView";
 
 export const metadata: Metadata = { title: "Settings · book-to-audio" };
 

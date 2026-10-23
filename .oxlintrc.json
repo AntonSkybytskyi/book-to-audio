@@ -12,5 +12,103 @@
     "builtin": true,
     "node": true
   },
-  "ignorePatterns": [".next/**", "dist/**", "data/**", "next-env.d.ts"]
+  "ignorePatterns": [".next/**", "dist/**", "data/**", "next-env.d.ts"],
+  "overrides": [
+    {
+      "files": ["src/ui/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["../**"],
+                "message": "Import across folders through the @/ui alias, and only down the layers."
+              },
+              {
+                "group": ["@/app/**"],
+                "message": "The UI never imports from the routes."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/ui/shared/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["../**"],
+                "message": "Import across folders through the @/ui alias, and only down the layers."
+              },
+              {
+                "group": ["@/app/**"],
+                "message": "The UI never imports from the routes."
+              },
+              {
+                "group": ["@/ui/entities/**"],
+                "message": "shared cannot import entities."
+              },
+              {
+                "group": ["@/ui/features/**"],
+                "message": "shared cannot import features."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/ui/entities/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["../**"],
+                "message": "Import across folders through the @/ui alias, and only down the layers."
+              },
+              {
+                "group": ["@/app/**"],
+                "message": "The UI never imports from the routes."
+              },
+              {
+                "group": ["@/ui/features/**"],
+                "message": "entities cannot import features."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/ui/features/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["../**"],
+                "message": "Import across folders through the @/ui alias, and only down the layers."
+              },
+              {
+                "group": ["@/app/**"],
+                "message": "The UI never imports from the routes."
+              },
+              {
+                "group": ["@/ui/features/**"],
+                "message": "A feature imports its own files with ./ and never another feature."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
 }

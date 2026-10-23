@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { PoolBanner } from "./_components/PoolBanner";
-import { SiteHeader } from "./_components/SiteHeader";
+import { QueryProvider } from "@/ui/shared/api/QueryProvider";
+import { PoolBanner } from "@/ui/features/pool/PoolBanner";
+import { SiteHeader } from "./SiteHeader";
 // oxlint-disable-next-line import/no-unassigned-import -- global stylesheet
 import "./globals.css";
 
@@ -14,9 +15,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
-        <SiteHeader />
-        <PoolBanner />
-        <main id="main">{children}</main>
+        <QueryProvider>
+          <SiteHeader />
+          <PoolBanner />
+          <main id="main">{children}</main>
+        </QueryProvider>
       </body>
     </html>
   );
