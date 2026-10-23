@@ -27,7 +27,7 @@ pnpm install
 pnpm dev
 ```
 
-`pnpm dev` starts core on `127.0.0.1:3002` and the Next.js dev server on `127.0.0.1:3001`, both reloading on changes, and the same nginx image as production in Docker in front of them. Open http://127.0.0.1:3000, as in production. Data is stored in `./data`. `WEB_PORT` and `CORE_PORT` move the two dev servers. The dev nginx reaches them through Docker Desktop's `host.docker.internal`; on Linux, run it with `network_mode: host` and `127.0.0.1` upstreams instead. Piper and ffmpeg are not installed on most dev machines, so develop with the fake engine, which needs no binaries (chapters then fail at the encoding step unless ffmpeg is on your PATH):
+`pnpm dev` starts core on `127.0.0.1:3002` and the Next.js dev server on `127.0.0.1:3001`, both reloading on changes, and the same nginx image as production in Docker in front of them. Open http://127.0.0.1:3000, as in production. Data is stored in `./data`. Core restarts when a file under `apps/api/src` changes; if it fails before any change (a bad setting, the port in use) or the dev nginx stops, `pnpm dev` stops with it. `WEB_PORT` and `CORE_PORT` move the two dev servers. The dev nginx reaches them through Docker Desktop's `host.docker.internal`; on Linux, run it with `network_mode: host` and `127.0.0.1` upstreams instead. Piper and ffmpeg are not installed on most dev machines, so develop with the fake engine, which needs no binaries (chapters then fail at the encoding step unless ffmpeg is on your PATH):
 
 ```bash
 TTS_ENGINE=fake FAKE_TTS_DELAY_MS=1500 pnpm dev
@@ -84,7 +84,7 @@ pnpm check         # all of the above
 
 The same checks run in the container with `docker compose run --rm check`.
 
-CI (`.github/workflows/ci.yml`) runs lint, format check, typecheck, tests, build and a build of every Docker image (not pushed) on every pull request and every push to `main`. The code checks are steps of one `check` job and all run even when one fails; the images are built by the `docker (api)`, `docker (web)` and `docker (edge)` jobs.
+CI (`.github/workflows/ci.yml`) runs lint, format check, typecheck, tests, build and a build of every Docker image (not pushed) on every pull request and every push to `main`. The code checks are steps of one `check` job and all run even when one fails; the images are built by the `docker (api)`, `docker (web)` and `docker (edge)` jobs, and `edge-smoke` starts the nginx image between stub upstreams and checks its routing, headers, upload limit and answer while core is down (`apps/edge/smoke-test.sh`, also runnable locally).
 
 Making these checks required before a PR can be merged into `main` needs a public repo or GitHub Pro. Once that is in place:
 
@@ -93,7 +93,7 @@ gh api -X PUT repos/AntonSkybytskyi/book-to-audio/branches/main/protection --inp
 {
   "required_status_checks": {
     "strict": false,
-    "contexts": ["check", "docker (api)", "docker (web)", "docker (edge)"]
+    "contexts": ["check", "docker (api)", "docker (web)", "docker (edge)", "edge-smoke"]
   },
   "enforce_admins": true,
   "required_pull_request_reviews": null,

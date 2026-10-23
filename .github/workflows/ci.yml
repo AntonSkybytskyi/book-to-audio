@@ -62,3 +62,11 @@ jobs:
           # Keeps the layers between runs, each image in its own cache (Piper and the voices for api).
           cache-from: type=gha,scope=${{ matrix.app }}
           cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+
+  # Starts the edge between stub upstreams: routing, Host/Origin/Range, the upload limit, core down.
+  edge-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: docker build -f apps/edge/Dockerfile -t book-to-audio-edge .
+      - run: apps/edge/smoke-test.sh book-to-audio-edge
