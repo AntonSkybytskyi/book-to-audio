@@ -40,4 +40,4 @@ Its config says `"phoneme_type": "text"`: it is **character based**, not phoneme
 
 ## Size
 
-The image grows by about 140 MB (the two new models). `docker compose build app` still builds (checked), and the voices stage fetches each file at the pinned revision and verifies its sha256.
+The image grows by about 140 MB (the two new models). The image still builds (checked; today that is `docker compose build core`), and the voices stage fetches each file at the pinned revision and verifies its sha256.
