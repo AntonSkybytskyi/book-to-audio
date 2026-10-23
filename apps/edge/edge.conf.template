@@ -33,6 +33,7 @@ server {
         # Uploads stream to core as they arrive. Core's own limit answers first, with a message the
         # page can show; this one, 1 MB above MAX_UPLOAD_MB for the form around the file, is a backstop.
         client_max_body_size ${NGINX_BODY_LIMIT};
+        error_page 413 = @too_large;
         proxy_request_buffering off;
         # Responses stream too: live updates (/api/events) arrive at once, and big downloads are not
         # spooled to disk here. Range requests and their 206 answers pass through untouched.
@@ -42,5 +43,11 @@ server {
         proxy_send_timeout 15m;
         proxy_read_timeout 15m;
         proxy_pass $core;
+    }
+
+    # The same JSON core sends for a file over the limit, so the upload page can show the message.
+    location @too_large {
+        default_type application/json;
+        return 413 '{"error":"too_large","message":"The file is larger than the upload limit."}';
     }
 }

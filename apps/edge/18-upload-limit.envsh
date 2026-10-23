@@ -2,7 +2,8 @@
 # Sourced by the nginx image's entrypoint before it fills in the templates: the body size limit is
 # MAX_UPLOAD_MB plus 1 MB for the multipart form around the file, so core's own limit answers first.
 case "${MAX_UPLOAD_MB:-}" in
-  "" | *[!0-9]*)
+  # A leading zero would be read as octal below, and 0 is not a limit.
+  "" | *[!0-9]* | 0*)
     echo "MAX_UPLOAD_MB must be a whole number of megabytes, got \"${MAX_UPLOAD_MB:-}\"" >&2
     exit 1
     ;;
