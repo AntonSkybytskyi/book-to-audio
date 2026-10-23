@@ -214,7 +214,9 @@ describe("BenchmarkRunner", () => {
     it("saves the voices that worked when one cannot be read", async () => {
       const broken: TtsEngine = {
         id: h.engine.id,
-        kind: "local",
+        concurrency: 4,
+        ready: true,
+        reachable: true,
         maxInputChars: h.engine.maxInputChars,
         voices: () => h.engine.voices(),
         async open(voiceId) {
@@ -239,7 +241,9 @@ describe("BenchmarkRunner", () => {
     it("fails with the engine's message when no voice can be measured, and saves nothing", async () => {
       const broken: TtsEngine = {
         id: "timed",
-        kind: "local",
+        concurrency: 4,
+        ready: true,
+        reachable: true,
         maxInputChars: 400,
         voices: () => h.engine.voices(),
         open: async () => {
@@ -262,7 +266,9 @@ describe("BenchmarkRunner", () => {
     it("fails plainly, without the technical message, for an unexpected error", async () => {
       const broken: TtsEngine = {
         id: "timed",
-        kind: "local",
+        concurrency: 4,
+        ready: true,
+        reachable: true,
         maxInputChars: 400,
         voices: () => h.engine.voices(),
         open: async () => {

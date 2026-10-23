@@ -10,6 +10,8 @@ export interface FakeEngineOptions {
   voices?: Voice[];
   /** Longest text one call accepts; small values make short chapters split into many chunks. */
   maxInputChars?: number;
+  /** Sessions the engine says it serves at once. */
+  concurrency?: number;
   /** Pretend synthesis takes this long, so progress is visible in the UI. */
   delayMs?: number;
   /** Any chunk containing this text always fails, like a crashing engine. */
@@ -27,7 +29,9 @@ export interface FakeEngineOptions {
  */
 export class FakeEngine implements TtsEngine {
   readonly id = "fake";
-  readonly kind = "local";
+  readonly concurrency: number;
+  readonly ready = true;
+  reachable = true;
   readonly maxInputChars: number;
   /** Sessions opened and closed so far, for tests that check nothing is left running. */
   opened = 0;
@@ -39,6 +43,7 @@ export class FakeEngine implements TtsEngine {
   constructor(options: FakeEngineOptions = {}) {
     this.options = options;
     this.maxInputChars = options.maxInputChars ?? 400;
+    this.concurrency = options.concurrency ?? 4;
     this.voiceList = options.voices ?? [
       { id: "fake-en", language: "en", name: "Fake English", sampleRate: SAMPLE_RATE },
     ];

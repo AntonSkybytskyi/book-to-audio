@@ -37,7 +37,9 @@ const DEFAULT_SCAN_TTL_MS = 30_000;
 /** Runs the Piper binary, one long-lived process per session. */
 export class PiperEngine implements TtsEngine {
   readonly id = "piper";
-  readonly kind = "local";
+  readonly concurrency = 1;
+  readonly ready = true;
+  readonly reachable = true;
   readonly maxInputChars = 1000;
   private readonly options: Required<PiperOptions>;
   private cache: VoiceFile[] = [];

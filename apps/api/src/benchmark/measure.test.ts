@@ -175,7 +175,9 @@ describe("measureVoice", () => {
     const engine = new TimedEngine();
     const failing: TtsEngine = {
       id: engine.id,
-      kind: "local",
+      concurrency: 4,
+      ready: true,
+      reachable: true,
       maxInputChars: engine.maxInputChars,
       voices: () => engine.voices(),
       async open(voiceId) {
@@ -203,7 +205,9 @@ describe("measureVoice", () => {
     let slow: ((session: TtsSession) => void) | null = null;
     const racing: TtsEngine = {
       id: engine.id,
-      kind: "local",
+      concurrency: 4,
+      ready: true,
+      reachable: true,
       maxInputChars: engine.maxInputChars,
       voices: () => engine.voices(),
       async open(voiceId) {
