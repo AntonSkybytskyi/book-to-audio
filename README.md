@@ -27,7 +27,7 @@ pnpm install
 pnpm dev
 ```
 
-`pnpm dev` starts core on `127.0.0.1:3002` and the Next.js dev server on `127.0.0.1:3001`, both reloading on changes, and the same nginx image as production in Docker in front of them. Open http://127.0.0.1:3000, as in production. Data is stored in `./data`. Core restarts when a file under `apps/api/src` changes; if it fails before any change (a bad setting, the port in use) or the dev nginx stops, `pnpm dev` stops with it. `WEB_PORT` and `CORE_PORT` move the two dev servers. The dev nginx reaches them through Docker Desktop's `host.docker.internal`; on Linux, run it with `network_mode: host` and `127.0.0.1` upstreams instead. Piper and ffmpeg are not installed on most dev machines, so develop with the fake engine, which needs no binaries (chapters then fail at the encoding step unless ffmpeg is on your PATH):
+`pnpm dev` starts core on `127.0.0.1:3002` and the Next.js dev server on `127.0.0.1:3001`, both reloading on changes, and the same nginx image as production in Docker in front of them. Open http://127.0.0.1:3000, as in production. Data is stored in `./data`. Core restarts when a file under `apps/api/src` changes or the contracts are rebuilt; if it fails before any change (a bad setting, the port in use) or the dev nginx stops, `pnpm dev` stops with it. `WEB_PORT` and `CORE_PORT` move the two dev servers. The dev nginx reaches them through Docker Desktop's `host.docker.internal`; on Linux, run it with `network_mode: host` and `127.0.0.1` upstreams instead. Piper and ffmpeg are not installed on most dev machines, so develop with the fake engine, which needs no binaries (chapters then fail at the encoding step unless ffmpeg is on your PATH):
 
 ```bash
 TTS_ENGINE=fake FAKE_TTS_DELAY_MS=1500 pnpm dev
