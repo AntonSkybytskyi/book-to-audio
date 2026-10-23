@@ -79,6 +79,7 @@ describe("OutputBuilder", () => {
       workers: 1,
       activeWorkers: 0,
       held: false,
+      services: [],
     });
     await settled(() => h.producer.isRunning(id));
 

@@ -6,7 +6,8 @@ import type { PoolControl } from "../convert/pool-types.js";
 import { UserFacingError } from "../errors.js";
 import type { EventBus } from "../events/bus.js";
 import { TEXT_PROCESSING_VERSION } from "../text/index.js";
-import { pickVoice, TtsError, type TtsEngine, type Voice } from "../tts/engine.js";
+import type { CatalogVoice, TtsCatalog } from "../tts/catalog.js";
+import { TtsError } from "../tts/engine.js";
 import { measureVoice, type MeasureDeps } from "./measure.js";
 import {
   wasBusy,
@@ -48,12 +49,12 @@ export interface BenchmarkLogger {
 }
 
 export interface BenchmarkDeps extends Pick<MeasureDeps, "prepare" | "encode" | "now"> {
-  engine: TtsEngine;
+  catalog: TtsCatalog;
   repo: BenchmarkRepository;
   pool: Pick<PoolControl, "hold" | "holdWhenIdle">;
   bus: EventBus;
-  /** The worker count in use and the most the settings allow. */
-  workers: () => { current: number; max: number };
+  /** A TTS service's worker count in use, and the most sessions worth comparing on it. */
+  workers: (service: string) => { current: number; max: number };
   /** Parent of the folder for the encoded chunks. */
   scratchDir: string;
   machine: () => MachineInfo;
@@ -64,9 +65,9 @@ export interface BenchmarkDeps extends Pick<MeasureDeps, "prepare" | "encode" | 
   logger?: BenchmarkLogger;
 }
 
-/** The default voice of each language that the engine has: the ones the app reads books with. */
-export function benchmarkVoices(engine: TtsEngine): Voice[] {
-  return LANGUAGES.flatMap((language) => pickVoice(engine, language) ?? []);
+/** The voice of each language: the ones the app reads books with. */
+export function benchmarkVoices(catalog: TtsCatalog): CatalogVoice[] {
+  return LANGUAGES.flatMap((language) => catalog.voiceFor(language) ?? []);
 }
 
 /**
@@ -119,11 +120,10 @@ export class BenchmarkRunner {
    * was measured while the computer was busy (and has not been repeated since).
    */
   needsRun(): boolean {
-    const { engine, repo, machine } = this.deps;
-    const stored = new Map(repo.all(engine.id).map((row) => [row.voiceId, row]));
+    const { catalog, repo, machine } = this.deps;
     const here = machine();
-    return benchmarkVoices(engine).some((voice) => {
-      const row = stored.get(voice.id);
+    return benchmarkVoices(catalog).some((voice) => {
+      const row = repo.get(voice.engine, voice.id);
       return (
         !row ||
         row.cpuCount !== here.cpuCount ||
@@ -189,9 +189,7 @@ export class BenchmarkRunner {
 
   /** The longest run so far, or a guess. */
   private expectedSeconds(): number {
-    const seconds = this.deps.repo
-      .all(this.deps.engine.id)
-      .flatMap((row) => (row.seconds ? [row.seconds] : []));
+    const seconds = this.deps.repo.all().flatMap((row) => (row.seconds ? [row.seconds] : []));
     return seconds.length > 0 ? Math.max(...seconds) : DEFAULT_EXPECTED_SECONDS;
   }
 
@@ -265,24 +263,25 @@ export class BenchmarkRunner {
     signal: AbortSignal,
     loadStart: number,
   ): Promise<void> {
-    const { engine, repo, logger } = this.deps;
-    const voices = benchmarkVoices(engine);
+    const { catalog, repo, logger } = this.deps;
+    const voices = benchmarkVoices(catalog);
     if (voices.length === 0) {
       throw new TtsError(
         "voice_not_found",
         "No voice is installed, so there is nothing to measure.",
       );
     }
-    const { current, max } = this.deps.workers();
-    const workerCounts = workerCountsFor(current, max);
     const measurements: VoiceMeasurement[] = [];
     let firstFailure: unknown = null;
     for (const [index, voice] of voices.entries()) {
       this.set({ ...this.current, language: voice.language, progress: index / voices.length });
       try {
+        const engine = catalog.engine(voice.engine);
+        if (!engine) throw new TtsError("voice_not_found", "The voice's speech service is gone.");
+        const { current, max } = this.deps.workers(voice.engine);
         measurements.push(
-          await measureVoice({ ...this.deps, scratchDir }, voice, {
-            workerCounts,
+          await measureVoice({ ...this.deps, engine, scratchDir }, voice, {
+            workerCounts: workerCountsFor(current, max),
             signal,
             onProgress: (share) =>
               this.set({ ...this.current, progress: (index + share) / voices.length }),

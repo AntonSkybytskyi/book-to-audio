@@ -1,7 +1,7 @@
 import type { ClaimedChapter } from "../books/queue.js";
 import { DiskFullError, GENERIC_CHAPTER_ERROR, UserFacingError } from "../errors.js";
 import { ProgressPublisher } from "../events/throttle.js";
-import { TtsError } from "../tts/engine.js";
+import { TtsError, type TtsEngine } from "../tts/engine.js";
 import type { ConvertedChapter } from "./convert-chapter.js";
 import { ConcurrencyMeter } from "./concurrency.js";
 import { chapterEvent, type Counts } from "./pool-events.js";
@@ -10,8 +10,21 @@ import { PoolGate, type Release } from "./pool-gate.js";
 import type { PoolControl, PoolDeps, PoolStatus } from "./pool-types.js";
 import { sleep } from "./retry.js";
 import { SessionHolder } from "./sessions.js";
+import { workerTarget } from "./worker-target.js";
+
+/** The workers of one TTS service. */
+interface Group {
+  engine: TtsEngine;
+  workers: Map<number, Worker>;
+  target: number;
+  /** Three of its chapters failed in a row: it takes no work until resumed. */
+  paused: boolean;
+  /** Busy workers of this service, for the speed estimates: services do not slow each other down. */
+  meter: ConcurrencyMeter;
+}
 
 interface Worker {
+  group: Group;
   index: number;
   /** Set when the worker count dropped below its index: it stops after its current chapter. */
   retiring: boolean;
@@ -28,22 +41,23 @@ interface Worker {
 }
 
 /**
- * N workers taking chapters from one global queue, earliest book first. Each
- * worker owns an engine session. Three chapters failing in a row, or a nearly
- * full disk, pause the pool.
+ * Workers taking chapters from one global queue, earliest book first, in a group per TTS service:
+ * as many as the service handles at once (or the settings say), each taking only chapters whose
+ * language is read by a voice on its service. Each worker owns an engine session. Three chapters
+ * of a service failing in a row pause that service; a nearly full disk pauses the whole pool.
  */
 export type { PoolControl, PoolDeps, PoolLogger, PoolStatus } from "./pool-types.js";
 
 export class WorkerPool implements PoolControl {
-  private readonly workers = new Map<number, Worker>();
+  private readonly groups = new Map<string, Group>();
   private readonly wakers = new Set<() => void>();
   private readonly closing = new Set<Promise<void>>();
   private readonly events: ProgressPublisher;
-  private target: number;
   private running = false;
+  /** The disk is nearly full: no service takes work. */
   private paused = false;
   private shutdown = new AbortController();
-  private readonly meter: ConcurrencyMeter;
+  private unsubscribe: (() => void) | null = null;
   private readonly now: () => number;
   /** Counts the times the pool was held, released or resumed: a chapter that saw one is no measure of speed. */
   private disturbances = 0;
@@ -54,10 +68,18 @@ export class WorkerPool implements PoolControl {
   });
 
   constructor(private readonly deps: PoolDeps) {
-    this.target = deps.settings.workers();
     this.events = new ProgressPublisher(deps.bus, deps.progressIntervalMs);
     this.now = deps.now ?? (() => performance.now());
-    this.meter = new ConcurrencyMeter(this.now);
+    for (const engine of deps.catalog.engines()) {
+      this.groups.set(engine.id, {
+        engine,
+        workers: new Map(),
+        target: 0,
+        paused: false,
+        meter: new ConcurrencyMeter(this.now),
+      });
+    }
+    this.countWorkers();
   }
 
   /** Re-queues interrupted chapters (their chunks are kept) and starts the workers. */
@@ -69,24 +91,35 @@ export class WorkerPool implements PoolControl {
     queue.refreshAllActive();
     this.paused = state.get().state === "paused";
     if (this.paused) logger?.info("the pool is paused; resume it from the app");
+    for (const group of this.groups.values()) {
+      group.paused = state.service(group.engine.id).state === "paused";
+      if (group.paused) logger?.info(`"${group.engine.id}" is paused; resume it from the app`);
+    }
     this.shutdown = new AbortController();
     this.running = true;
-    this.target = this.deps.settings.workers();
-    this.reconcile();
+    // A service that comes back, goes away or reports another limit gets its workers counted again.
+    this.unsubscribe = this.deps.catalog.onChange(() => {
+      this.refreshWorkers();
+      this.wake(); // A voice that appeared may make queued chapters claimable.
+    });
+    this.countWorkers();
+    for (const group of this.groups.values()) this.reconcile(group);
     this.publishPool();
   }
 
   /** Cancels running chapters, which go back to the queue, and waits until every worker is gone. */
   async stop(): Promise<void> {
     this.running = false;
+    this.unsubscribe?.();
+    this.unsubscribe = null;
     this.shutdown.abort();
-    const loops = [...this.workers.values()].map((worker) => worker.loop);
-    for (const worker of this.workers.values()) worker.current?.controller.abort();
+    const workers = this.workers();
+    for (const worker of workers) worker.current?.controller.abort();
     this.wake();
-    await Promise.all(loops);
+    await Promise.all(workers.map((worker) => worker.loop));
     // Workers that retired earlier may still be stopping their engine process.
     await Promise.all(this.closing);
-    this.workers.clear();
+    for (const group of this.groups.values()) group.workers.clear();
     this.events.stop();
   }
 
@@ -96,8 +129,27 @@ export class WorkerPool implements PoolControl {
 
   status(): PoolStatus {
     const { state, error, cause } = this.deps.state.get();
-    const activeWorkers = [...this.workers.values()].filter((worker) => worker.current).length;
-    return { state, error, cause, workers: this.target, activeWorkers, held: this.gate.held };
+    const services = [...this.groups.values()].map(({ engine, workers, target }) => {
+      const service = this.deps.state.service(engine.id);
+      return {
+        id: engine.id,
+        state: service.state,
+        error: service.error,
+        reachable: engine.reachable,
+        workers: target,
+        reportedWorkers: engine.ready ? engine.concurrency : 0,
+        activeWorkers: [...workers.values()].filter((worker) => worker.current).length,
+      };
+    });
+    return {
+      state,
+      error,
+      cause,
+      workers: services.reduce((sum, service) => sum + service.workers, 0),
+      activeWorkers: services.reduce((sum, service) => sum + service.activeWorkers, 0),
+      held: this.gate.held,
+      services,
+    };
   }
 
   hold(signal?: AbortSignal): Promise<Release> {
@@ -108,10 +160,12 @@ export class WorkerPool implements PoolControl {
     return this.gate.holdWhenIdle(() => this.idle(), signal);
   }
 
+  private workers(): Worker[] {
+    return [...this.groups.values()].flatMap((group) => [...group.workers.values()]);
+  }
+
   private inFlight(): Promise<void>[] {
-    return [...this.workers.values()].flatMap((worker) =>
-      worker.processing ? [worker.processing] : [],
-    );
+    return this.workers().flatMap((worker) => (worker.processing ? [worker.processing] : []));
   }
 
   /** Looks again for an idle moment, for a waiter that was held up by something outside the pool. */
@@ -119,28 +173,49 @@ export class WorkerPool implements PoolControl {
     this.gate.offerIdle(() => this.idle());
   }
 
-  /** No chapter is being read and none could be taken (a stopped pool has no workers at all). */
+  /**
+   * No chapter is being read and none could be taken (a stopped pool has no workers at all).
+   * Chapters whose language has no voice, or whose service has no workers, cannot be taken.
+   */
   private idle(): boolean {
     if (this.inFlight().length > 0 || this.deps.busyElsewhere?.()) return false;
-    return !this.running || this.paused || !this.deps.queue.hasClaimable();
+    if (!this.running || this.paused) return true;
+    const languages = [...this.groups.values()]
+      .filter((group) => group.target > 0 && !group.paused)
+      .flatMap((group) => this.deps.catalog.languagesOn(group.engine.id));
+    return !this.deps.queue.hasClaimable(languages);
   }
 
-  resume(): PoolStatus {
-    if (this.deps.state.resume()) {
-      this.paused = false;
+  resume(service?: string): PoolStatus {
+    if (this.deps.state.resume(service)) {
+      if (service === undefined) this.paused = false;
+      for (const group of this.groups.values()) {
+        if (service === undefined || group.engine.id === service) group.paused = false;
+      }
       this.disturbances++;
-      this.deps.logger?.info("the pool was resumed");
+      this.deps.logger?.info(
+        service === undefined ? "the pool was resumed" : `"${service}" was resumed`,
+      );
       this.wake();
     }
     this.publishPool();
     return this.status();
   }
 
-  setWorkers(count: number): PoolStatus {
-    this.target = count;
-    if (this.running) this.reconcile();
+  refreshWorkers(): PoolStatus {
+    this.countWorkers();
+    if (this.running) for (const group of this.groups.values()) this.reconcile(group);
     this.publishPool();
     return this.status();
+  }
+
+  private countWorkers(): void {
+    for (const group of this.groups.values()) {
+      group.target = workerTarget(
+        group.engine,
+        this.deps.settings.workersOverride(group.engine.id),
+      );
+    }
   }
 
   /**
@@ -164,7 +239,7 @@ export class WorkerPool implements PoolControl {
     afterSettle?: () => void,
   ): Promise<void> {
     const settled: Promise<void>[] = [];
-    for (const { current, processing } of this.workers.values()) {
+    for (const { current, processing } of this.workers()) {
       if (!current || !matches(current.task)) continue;
       if (afterSettle) current.afterSettle.push(afterSettle);
       current.controller.abort();
@@ -173,28 +248,29 @@ export class WorkerPool implements PoolControl {
     await Promise.all(settled);
   }
 
-  private reconcile(): void {
-    for (let index = 0; index < this.target; index++) {
-      const worker = this.workers.get(index);
+  private reconcile(group: Group): void {
+    for (let index = 0; index < group.target; index++) {
+      const worker = group.workers.get(index);
       if (worker) worker.retiring = false;
-      else this.spawn(index);
+      else this.spawn(group, index);
     }
-    for (const worker of this.workers.values()) {
-      if (worker.index >= this.target) worker.retiring = true;
+    for (const worker of group.workers.values()) {
+      if (worker.index >= group.target) worker.retiring = true;
     }
     this.wake();
   }
 
-  private spawn(index: number): void {
+  private spawn(group: Group, index: number): void {
     const worker: Worker = {
+      group,
       index,
       retiring: false,
-      sessions: new SessionHolder(this.deps.engine, { idleMs: this.deps.sessionIdleMs }),
+      sessions: new SessionHolder(group.engine, { idleMs: this.deps.sessionIdleMs }),
       current: null,
       processing: null,
       loop: Promise.resolve(),
     };
-    this.workers.set(index, worker);
+    group.workers.set(index, worker);
     worker.loop = this.work(worker);
   }
 
@@ -205,10 +281,14 @@ export class WorkerPool implements PoolControl {
   }
 
   private async work(worker: Worker): Promise<void> {
-    const { queue, logger, backoffMs = 1000 } = this.deps;
+    const { queue, catalog, logger, backoffMs = 1000 } = this.deps;
+    const { group } = worker;
     while (this.running && !worker.retiring) {
       try {
-        const task = this.paused || this.gate.held ? null : queue.claimNext();
+        const task =
+          this.paused || group.paused || this.gate.held
+            ? null
+            : queue.claimNext(catalog.languagesOn(group.engine.id));
         if (task) {
           worker.processing = this.process(worker, task);
           try {
@@ -228,7 +308,7 @@ export class WorkerPool implements PoolControl {
       }
     }
     // Leave the map in the same tick as the check above, so a count that rises again spawns a new one.
-    if (this.workers.get(worker.index) === worker) this.workers.delete(worker.index);
+    if (group.workers.get(worker.index) === worker) group.workers.delete(worker.index);
     // The last chapter may have ended on this worker: nobody else is left to notice the pool is idle.
     this.gate.offerIdle(() => this.idle());
     this.wake();
@@ -246,9 +326,10 @@ export class WorkerPool implements PoolControl {
     const controller = new AbortController();
     const afterSettle: (() => void)[] = [];
     worker.current = { task, controller, afterSettle };
+    const { meter } = worker.group;
     const startedAt = this.now();
     const calm = this.disturbances;
-    const crowd = this.meter.enter();
+    const crowd = meter.enter();
     const counts = { done: task.chunksDone, total: task.chunkCount };
     this.events.publish(chapterEvent(task, "generating", counts));
     this.publishPool();
@@ -280,11 +361,11 @@ export class WorkerPool implements PoolControl {
     }
     worker.current = null;
     const wallSeconds = (this.now() - startedAt) / 1000;
-    const concurrency = this.meter.averageSince(crowd);
-    this.meter.leave();
+    const concurrency = meter.averageSince(crowd);
+    meter.leave();
 
     try {
-      this.settle(task, controller.signal, converted, failure, counts, {
+      this.settle(worker.group, task, controller.signal, converted, failure, counts, {
         wallSeconds,
         concurrency,
         disturbed: this.disturbances !== calm,
@@ -316,6 +397,7 @@ export class WorkerPool implements PoolControl {
   }
 
   private settle(
+    group: Group,
     task: ClaimedChapter,
     signal: AbortSignal,
     converted: ConvertedChapter | null,
@@ -323,14 +405,15 @@ export class WorkerPool implements PoolControl {
     counts: Counts,
     timing: { wallSeconds: number; concurrency: number; disturbed: boolean },
   ): void {
-    const { queue, converter, state, logger } = this.deps;
-    const where = { bookId: task.bookId, chapter: task.position };
+    const { queue, converter, catalog, state, logger } = this.deps;
+    const service = group.engine.id;
+    const where = { bookId: task.bookId, chapter: task.position, service };
 
     if (converted) {
       if (queue.markDone(task, converted.audioPath, converted.durationSeconds)) {
         converter.discardChunks(task);
-        state.recordSuccess();
-        recordTiming(this.deps, task, converted, timing);
+        state.recordSuccess(service);
+        recordTiming(this.deps, service, task, converted, timing);
         this.events.publish({
           ...chapterEvent(task, "done", counts),
           progress: 1,
@@ -355,6 +438,16 @@ export class WorkerPool implements PoolControl {
       return;
     }
 
+    if (failure instanceof TtsError && failure.code === "unreachable") {
+      // The service is down, not the chapter's fault: it waits for the service, which gets no workers
+      // until it answers again.
+      logger?.warn({ detail: failure.detail, ...where }, "the TTS service does not answer");
+      this.requeue(task, counts);
+      this.refreshWorkers();
+      void catalog.refresh(service);
+      return;
+    }
+
     if (failure instanceof DiskFullError) {
       // Not the chapter's fault: keep it and its chunks, and stop taking work until there is room.
       logger?.error({ err: failure, detail: failure.detail, ...where }, "the disk is nearly full");
@@ -371,12 +464,23 @@ export class WorkerPool implements PoolControl {
     // The finished chunks stay, so running the chapter again can continue from them.
     if (!queue.markFailed(task, message)) return;
     publishFailure(this.deps, this.events, task, counts, message);
-    // Text that cannot be read says nothing about the engine, so it does not count towards
-    // pausing the pool. Everything else (a crash, a timeout, a missing binary) does.
-    if (failure instanceof TtsError && failure.code === "bad_input") return;
-    if (state.recordFailure(message)) {
-      this.paused = true;
-      logger?.error({ error: message }, "three chapters failed in a row, the pool is paused");
+    // Text that cannot be read says nothing about the service, and a voice that went away only
+    // means the service's voice list changed, so neither counts towards pausing it. Everything else
+    // (a crash, a timeout, a missing binary) does.
+    if (failure instanceof TtsError && failure.code === "voice_not_found")
+      void catalog.refresh(service);
+    if (
+      failure instanceof TtsError &&
+      (failure.code === "bad_input" || failure.code === "voice_not_found")
+    ) {
+      return;
+    }
+    if (state.recordFailure(service, message)) {
+      group.paused = true;
+      logger?.error(
+        { error: message, service },
+        "three chapters of a TTS service failed in a row, its workers are paused",
+      );
     }
   }
 

@@ -46,7 +46,7 @@ describe("deleting a book with a pool running real chapter conversions", () => {
     storage.ensureAudioDir(id);
     fs.writeFileSync(path.join(storage.bookDir(id), "source.epub"), "epub");
     const converter = createChapterConverter({
-      engine: h.ctx.engine,
+      catalog: h.ctx.catalog,
       storage,
       chunks: new ChunkStore(storage),
       encode: options.encode ?? fakeEncode,

@@ -1,5 +1,6 @@
 # The edge for `pnpm dev`: the same nginx image and config as in production, in front of web and
-# core running on this machine (`pnpm dev` starts them on 127.0.0.1:3001 and 127.0.0.1:3002).
+# core running on this machine (`pnpm dev` starts them on 127.0.0.1:3001 and 127.0.0.1:3002, and
+# piper-api, which core calls directly, on 127.0.0.1:3003).
 name: book-to-audio-dev
 
 services:

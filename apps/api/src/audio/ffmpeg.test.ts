@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ProcessRunner, RunResult } from "../process.js";
-import { FakeEngine } from "../tts/fake.js";
+import { FakeEngine } from "../testing/fake-engine.js";
 import { hasBinary } from "../testing/binaries.js";
 import {
   buildConcatArgs,

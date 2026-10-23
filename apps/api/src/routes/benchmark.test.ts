@@ -15,12 +15,14 @@ import type { BenchmarkView } from "../benchmark/view.js";
 import { prepareChunks } from "../convert/chapter-text.js";
 import { createTestContext, type TestContext } from "../testing/context.js";
 import { TimedEngine } from "../testing/timed-engine.js";
+import { TtsCatalog } from "../tts/catalog.js";
 
 const machine = { cpuCount: 8, cpuModel: "Test CPU" };
 
 describe("benchmark routes", () => {
   let ctx: TestContext;
   let engine: TimedEngine;
+  let catalog: TtsCatalog;
   let app: FastifyInstance;
   let runner: BenchmarkRunner;
   let scratch: string;
@@ -39,10 +41,12 @@ describe("benchmark routes", () => {
       ],
       msPerChar: 12,
       audioPerChar: 0.06,
+      concurrency: 2,
     });
+    catalog = new TtsCatalog([engine]);
     scratch = fs.mkdtempSync(path.join(os.tmpdir(), "bench-route-"));
     runner = new BenchmarkRunner({
-      engine,
+      catalog,
       repo: new BenchmarkRepository(ctx.db),
       pool: ctx.pool,
       bus: ctx.bus,
@@ -56,7 +60,7 @@ describe("benchmark routes", () => {
     app = buildServer({
       db: ctx.db,
       storage: ctx.storage,
-      engine,
+      catalog,
       maxUploadBytes: 1024 * 1024,
       parseEpub: ctx.parseEpub,
       bus: ctx.bus,
@@ -88,14 +92,12 @@ describe("benchmark routes", () => {
         state: "idle",
         outcome: null,
         needsRun: true,
-        suggestedWorkers: null,
-        workers: 2,
-        maxWorkers: 4,
+        services: [{ id: "timed", workers: 2, maxWorkers: 2, suggestedWorkers: null }],
         machine,
       });
       expect(body.rows).toEqual([
-        { language: "en", voiceId: "t-en", result: null },
-        { language: "uk", voiceId: "t-uk", result: null },
+        { language: "en", voiceId: "t-en", service: "timed", result: null },
+        { language: "uk", voiceId: "t-uk", service: "timed", result: null },
       ]);
     });
 
@@ -115,7 +117,7 @@ describe("benchmark routes", () => {
       // 90,000 words of 5.8 characters at 60 s per 1,000: 8.7 hours of audio; at 5 audio s/s alone, 1.7 hours.
       expect(en?.novelAudioSeconds).toBeCloseTo((90_000 * 5.8 * 60) / 1000, 0);
       expect(en?.novelConvertSeconds).toBeGreaterThan(en!.novelAudioSeconds / 5 / 2);
-      expect(body.suggestedWorkers).toBeGreaterThanOrEqual(1);
+      expect(body.services[0]?.suggestedWorkers).toBeGreaterThanOrEqual(1);
     });
 
     it("marks results from another machine as outdated", async () => {
@@ -231,7 +233,7 @@ describe("benchmark routes", () => {
     const bare = buildServer({
       db: ctx.db,
       storage: ctx.storage,
-      engine,
+      catalog,
       maxUploadBytes: 1024,
       bus: ctx.bus,
       pool: ctx.pool,

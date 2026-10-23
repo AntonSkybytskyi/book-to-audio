@@ -1,7 +1,7 @@
 import type { ChapterQueue } from "../books/queue.js";
 import type { EventBus } from "../events/bus.js";
 import type { SettingsStore } from "../settings/settings.js";
-import type { TtsEngine } from "../tts/engine.js";
+import type { TtsCatalog } from "../tts/catalog.js";
 import type { ChapterConverter } from "./convert-chapter.js";
 import type { Release } from "./pool-gate.js";
 import type { PoolStatus } from "@book-to-audio/contracts";
@@ -16,13 +16,15 @@ export interface PoolLogger {
 
 /** One finished chapter, as the speed estimates learn from it. */
 export interface ChapterTiming {
+  /** The TTS service the voice is on. */
+  engine: string;
   voiceId: string;
   language: string;
   preparedChars: number;
   durationSeconds: number;
   /** Seconds the chapter took, from claim to saved. */
   wallSeconds: number;
-  /** Average number of workers that were busy meanwhile, this one included. */
+  /** Average number of workers of the same service that were busy meanwhile, this one included. */
   concurrency: number;
 }
 
@@ -35,10 +37,13 @@ export interface PoolControl {
   /** Tells idle workers that new chapters were queued. */
   notify(): void;
   status(): PoolStatus;
-  /** Lets a paused pool take work again. */
-  resume(): PoolStatus;
-  /** Takes effect at once: new workers start, extra ones stop after their current chapter. */
-  setWorkers(count: number): PoolStatus;
+  /** Lets a paused pool, or with `service` only that service's workers, take work again. */
+  resume(service?: string): PoolStatus;
+  /**
+   * Counts each service's workers again, after the settings or a service changed. Takes effect at
+   * once: new workers start, extra ones stop after their current chapter.
+   */
+  refreshWorkers(): PoolStatus;
   /**
    * Stops new chapters from starting and resolves once the running ones have finished, with the
    * function that gives the pool back. Cancelling `signal` while waiting gives it back too.
@@ -55,14 +60,14 @@ export interface PoolControl {
 export interface PoolDeps {
   queue: ChapterQueue;
   converter: ChapterConverter;
-  engine: TtsEngine;
+  catalog: TtsCatalog;
   state: PoolStateStore;
-  settings: SettingsStore;
+  settings: Pick<SettingsStore, "workersOverride">;
   bus: EventBus;
   logger?: PoolLogger;
   /** Pause after a worker hits a database error. Tests shorten it. */
   backoffMs?: number;
-  /** How long an idle worker keeps its engine process. */
+  /** How long an idle worker keeps its engine session. */
   sessionIdleMs?: number;
   /** Shortest time between progress events of one chapter. */
   progressIntervalMs?: number;

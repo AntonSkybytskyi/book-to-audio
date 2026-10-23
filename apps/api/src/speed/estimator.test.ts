@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { SpeedModel } from "@book-to-audio/contracts";
 import type { BookLoad, ChapterLoad } from "../books/repository.js";
-import { FakeEngine } from "../tts/fake.js";
+import { FakeEngine } from "../testing/fake-engine.js";
 import type { SpeedCalibration } from "./calibration.js";
 import { Estimator } from "./estimator.js";
+import { TtsCatalog } from "../tts/catalog.js";
 
 const model = (overrides: Partial<SpeedModel> = {}): SpeedModel => ({
   secondsPerKChar: 60,
@@ -47,7 +48,7 @@ const make = (
     modelFor: (_engine: string, voice: { id: string }) => models[voice.id] ?? model(),
   } as unknown as SpeedCalibration;
   return new Estimator({
-    engine,
+    catalog: new TtsCatalog([engine]),
     calibration,
     workers: () => options.workers ?? 1,
     poolPaused: () => options.paused ?? false,

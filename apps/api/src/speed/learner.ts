@@ -16,16 +16,16 @@ const RATE_BAND = { min: 0.75, max: 1.25 } as const;
  */
 export class SpeedLearning implements SpeedLearner {
   constructor(
-    private readonly engineId: string,
     private readonly calibration: SpeedCalibration,
     private readonly learning: LearningRepository,
   ) {}
 
   recordChapter(timing: ChapterTiming): void {
-    const { voiceId, language, preparedChars, durationSeconds, wallSeconds, concurrency } = timing;
+    const { engine, voiceId, language, preparedChars, durationSeconds, wallSeconds, concurrency } =
+      timing;
     if (durationSeconds < MIN_AUDIO_SECONDS || preparedChars <= 0 || wallSeconds <= 0) return;
-    const base = this.calibration.baseModel(this.engineId, { id: voiceId, language });
-    const before = this.learning.get(this.engineId, voiceId) ?? {
+    const base = this.calibration.baseModel(engine, { id: voiceId, language });
+    const before = this.learning.get(engine, voiceId) ?? {
       secondsPerKChar: base.secondsPerKChar,
       slowdown: 1,
       samples: 0,
@@ -41,7 +41,7 @@ export class SpeedLearning implements SpeedLearner {
       base.secondsPerKChar * RATE_BAND.max,
     ] as const;
     const rate = clamp(durationSeconds / (preparedChars / 1000), ...band);
-    this.learning.save(this.engineId, voiceId, {
+    this.learning.save(engine, voiceId, {
       secondsPerKChar: clamp(ewma(before.secondsPerKChar, rate, before.samples), ...band),
       slowdown: ewma(before.slowdown, slowdown, before.samples),
       samples: before.samples + 1,

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { result, stubConverter, tick, until, usePoolHarness, ok } from "../testing/pool-harness.js";
 import { TtsError } from "../tts/engine.js";
 import { PoolStateStore } from "./pool-state.js";
+import { LANGUAGES } from "../books/languages.js";
 
 describe("WorkerPool: stale results", () => {
   const h = usePoolHarness();
@@ -21,7 +22,7 @@ describe("WorkerPool: stale results", () => {
       await until(() => h.gates.open.length === 1);
       // The chapter is taken away and given to a newer attempt behind the worker's back.
       h.ctx.db.prepare("UPDATE chapters SET status = 'queued' WHERE book_id = ?").run(id);
-      const newer = h.queue.claimNext();
+      const newer = h.queue.claimNext(LANGUAGES);
       expect(newer?.claim).toBe(2);
 
       h.gates.releaseAll();
@@ -43,7 +44,7 @@ describe("WorkerPool: stale results", () => {
       h.start(converter);
       await until(() => h.gates.open.length === 1);
       h.ctx.db.prepare("UPDATE chapters SET status = 'queued' WHERE book_id = ?").run(id);
-      const newer = h.queue.claimNext();
+      const newer = h.queue.claimNext(LANGUAGES);
       if (!newer) throw new Error("expected the chapter again");
       h.queue.markDone(newer, result(newer).audioPath, 3);
 
@@ -63,14 +64,14 @@ describe("WorkerPool: stale results", () => {
       const p = h.start(converter);
       await until(() => h.gates.open.length === 1);
       h.ctx.db.prepare("UPDATE chapters SET status = 'queued' WHERE book_id = ?").run(id);
-      h.queue.claimNext();
+      h.queue.claimNext(LANGUAGES);
 
       h.gates.releaseAll();
       await until(() => h.logged.some((l) => l.message === "chapter failed"));
       await tick();
 
       expect(h.repo.chapter(id, 1)).toMatchObject({ status: "generating", error: null });
-      expect(new PoolStateStore(h.ctx.db).get().consecutiveFailures).toBe(0);
+      expect(new PoolStateStore(h.ctx.db).service("fake").consecutiveFailures).toBe(0);
       expect(p.status().state).toBe("running");
     });
 

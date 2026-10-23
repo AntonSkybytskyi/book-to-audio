@@ -8,11 +8,12 @@ import { fakeEncode, fakeJoin } from "../testing/fake-codec.js";
 import { until } from "../testing/pool-harness.js";
 import { chunkText } from "../tts/chunk.js";
 import { TtsError, type TtsSession } from "../tts/engine.js";
-import { FakeEngine, type FakeEngineOptions } from "../tts/fake.js";
+import { FakeEngine, type FakeEngineOptions } from "../testing/fake-engine.js";
 import { ChunkStore, type ChunkStoreOptions } from "./chunk-store.js";
 import { createChapterConverter } from "./convert-chapter.js";
 import { PoolStateStore } from "./pool-state.js";
 import { WorkerPool } from "./pool.js";
+import { TtsCatalog } from "../tts/catalog.js";
 
 // The pool with the real converter, chunk store and queue; only the engine and the codec are fake.
 
@@ -75,12 +76,13 @@ describe("WorkerPool with the real converter", () => {
     options: { engine?: FakeEngine; idleMs?: number; store?: ChunkStoreOptions } = {},
   ) => {
     engine = options.engine ?? new FakeEngine(SMALL_CHUNKS);
-    ctx.settings.setWorkers(workers);
+    ctx.settings.setWorkersOverride(engine.id, workers);
+    const catalog = new TtsCatalog([engine]);
     pool = new WorkerPool({
       queue,
-      engine,
+      catalog,
       converter: createChapterConverter({
-        engine,
+        catalog,
         storage: ctx.storage,
         chunks: new ChunkStore(ctx.storage, options.store),
         encode: fakeEncode,
@@ -257,7 +259,8 @@ describe("WorkerPool with the real converter", () => {
     await until(() => repo.get(id)?.status === "done");
     expect(engine.openSessions).toBe(2);
 
-    p.setWorkers(1);
+    ctx.settings.setWorkersOverride(engine.id, 1);
+    p.refreshWorkers();
 
     await until(() => engine.openSessions === 1);
     await p.stop();
@@ -303,7 +306,7 @@ describe("WorkerPool with the real converter", () => {
     expect(chunkFiles(id, 2)).toHaveLength(repo.chapter(id, 2)?.chunksDone ?? -1);
   });
 
-  it("pauses the pool after three failed chapters and continues after resume", async () => {
+  it("pauses the service after three failed chapters and continues after resume", async () => {
     const broken = new FakeEngine({ failMarker: "[broken]" });
     const id = addBook([
       ...Array.from({ length: 3 }, () => sentences(3, " [broken]")),
@@ -312,10 +315,10 @@ describe("WorkerPool with the real converter", () => {
     ]);
     const p = createPool(1, { engine: broken });
 
-    await until(() => p.status().state === "paused");
+    await until(() => p.status().services[0]?.state === "paused");
 
-    expect(p.status()).toMatchObject({
-      cause: "failures",
+    expect(p.status().services[0]).toMatchObject({
+      state: "paused",
       error: "The speech engine failed on this chapter. Tried 4 times.",
     });
     expect(repo.chapters(id).map((c) => c.status)).toEqual([

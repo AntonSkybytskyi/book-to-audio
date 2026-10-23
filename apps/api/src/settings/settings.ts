@@ -1,48 +1,32 @@
 import type Database from "better-sqlite3";
 import { isLanguage, LANGUAGES, type Language } from "../books/languages.js";
-import type { SettingsView } from "@book-to-audio/contracts";
+import { MAX_WORKERS } from "@book-to-audio/contracts";
 
 /** English and Ukrainian are shown until the owner changes it; Russian is supported but hidden. */
 export const DEFAULT_SHOWN_LANGUAGES: readonly Language[] = ["en", "uk"];
 
-export interface SettingsOptions {
-  /** Number of CPU cores. */
-  cpus: number;
-  /** `WORKERS` from the environment: replaces the default (never above `cpus`), not a saved choice. */
-  envWorkers?: number;
-}
-
 /** Owner-chosen settings, stored as key/value rows. */
 export class SettingsStore {
-  readonly maxWorkers: number;
-  readonly defaultWorkers: number;
+  constructor(private readonly db: Database.Database) {}
 
-  constructor(
-    private readonly db: Database.Database,
-    { cpus, envWorkers }: SettingsOptions,
-  ) {
-    this.maxWorkers = Math.max(1, cpus);
-    this.defaultWorkers = Math.min(
-      this.maxWorkers,
-      envWorkers ?? Math.max(1, Math.floor(cpus / 2)),
-    );
+  /** The number of workers the owner set for a TTS service, or undefined for the one it reports. */
+  workersOverride(service: string): number | undefined {
+    const saved = this.read(`workers.${service}`);
+    if (saved === undefined) return undefined;
+    const value = Number(saved);
+    return Number.isInteger(value) ? Math.min(MAX_WORKERS, Math.max(1, value)) : undefined;
   }
 
-  /** The saved number of workers, else the default. */
-  workers(): number {
-    const saved = this.read("workers");
-    const value = saved === undefined ? this.defaultWorkers : Number(saved);
-    return Number.isInteger(value)
-      ? Math.min(this.maxWorkers, Math.max(1, value))
-      : this.defaultWorkers;
-  }
-
-  /** Throws a RangeError for a value outside 1 to `maxWorkers`. */
-  setWorkers(count: number): void {
-    if (!Number.isInteger(count) || count < 1 || count > this.maxWorkers) {
-      throw new RangeError(`workers must be a whole number from 1 to ${this.maxWorkers}`);
+  /** Null goes back to the reported number. Throws a RangeError for a value outside 1 to `MAX_WORKERS`. */
+  setWorkersOverride(service: string, count: number | null): void {
+    if (count === null) {
+      this.remove(`workers.${service}`);
+      return;
     }
-    this.write("workers", String(count));
+    if (!Number.isInteger(count) || count < 1 || count > MAX_WORKERS) {
+      throw new RangeError(`workers must be a whole number from 1 to ${MAX_WORKERS}`);
+    }
+    this.write(`workers.${service}`, String(count));
   }
 
   /** The saved languages of the picker, else English and Ukrainian. */
@@ -65,19 +49,14 @@ export class SettingsStore {
     this.write("shown_languages", JSON.stringify(ordered(codes)));
   }
 
-  view(): SettingsView {
-    return {
-      workers: this.workers(),
-      maxWorkers: this.maxWorkers,
-      defaultWorkers: this.defaultWorkers,
-      shownLanguages: this.shownLanguages(),
-    };
-  }
-
   private read(key: string): string | undefined {
     return this.db.prepare("SELECT value FROM settings WHERE key = ?").pluck().get(key) as
       | string
       | undefined;
+  }
+
+  private remove(key: string): void {
+    this.db.prepare("DELETE FROM settings WHERE key = ?").run(key);
   }
 
   private write(key: string, value: string): void {

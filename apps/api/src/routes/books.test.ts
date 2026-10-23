@@ -11,6 +11,7 @@ import { ParserBusyError } from "../epub/worker-parser.js";
 import { lighthouseBook, rainBook } from "../epub/testing/sample-books.js";
 import { createTestContext, type TestContext } from "../testing/context.js";
 import { multipartBody } from "../testing/multipart.js";
+import { LANGUAGES } from "../books/languages.js";
 
 interface ChapterJson {
   position: number;
@@ -36,7 +37,7 @@ describe("book routes", () => {
     buildServer({
       db: ctx.db,
       storage: ctx.storage,
-      engine: ctx.engine,
+      catalog: ctx.catalog,
       maxUploadBytes,
       parseEpub,
       bus: ctx.bus,
@@ -404,7 +405,10 @@ describe("book routes", () => {
       expect(res.json<BookJson>().status).toBe("converting");
       expect(res.json<BookJson>().chapters.map((c) => c.status)).toEqual(Array(4).fill("queued"));
       expect(queued).toBe(1);
-      expect(new ChapterQueue(ctx.db).claimNext()).toMatchObject({ bookId: book.id, position: 1 });
+      expect(new ChapterQueue(ctx.db).claimNext(LANGUAGES)).toMatchObject({
+        bookId: book.id,
+        position: 1,
+      });
     });
 
     it("makes the book's audio folder, which the workers never create", async () => {
@@ -470,7 +474,7 @@ describe("book routes", () => {
       const book = await uploadLighthouse();
       await app.inject({ method: "POST", url: `/api/books/${book.id}/convert` });
       const queue = new ChapterQueue(ctx.db);
-      const task = queue.claimNext();
+      const task = queue.claimNext(LANGUAGES);
       if (!task) throw new Error("expected a queued chapter");
       ctx.storage.ensureAudioDir(book.id);
       const rel = ctx.storage.audioRelPath(book.id, task.position);

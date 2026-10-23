@@ -11,6 +11,7 @@ import type { AppEvent } from "../events/bus.js";
 import { BuildCancelled } from "../outputs/errors.js";
 import { createTestContext, type TestContext } from "./context.js";
 import { until } from "./pool-harness.js";
+import { LANGUAGES } from "../books/languages.js";
 
 /** A producer a test controls: every build waits at a gate until the test lets it go or makes it fail. */
 export class ScriptedProducer implements OutputProducer {
@@ -177,7 +178,7 @@ export function useOutputsHarness(options: Partial<OutputBuilderDeps> = {}): Out
       ctx.storage.ensureAudioDir(id);
       repo.queue(id);
       for (let i = 0; i < chapterCount; i++) {
-        const task = queue.claimNext();
+        const task = queue.claimNext(LANGUAGES);
         if (!task) throw new Error("expected a chapter");
         const rel = ctx.storage.audioRelPath(id, task.position);
         fs.writeFileSync(ctx.storage.resolve(rel), `audio ${task.position}`);

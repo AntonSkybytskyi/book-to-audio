@@ -196,14 +196,14 @@ describe("regenerate a chapter with a running pool", () => {
         throw new TtsError("synthesis_failed", "Engine down.");
       }),
     );
-    await until(() => p.status().state === "paused");
+    await until(() => p.status().services[0]?.state === "paused");
     await until(() => h.repo.chapters(id).filter((c) => c.status === "failed").length === 3);
 
     await controls().regenerateChapter(id, 1);
     await tick();
     await tick();
 
-    expect(p.status().state).toBe("paused");
+    expect(p.status().services[0]?.state).toBe("paused");
     expect(h.status(id, 1)).toBe("queued");
   });
 
@@ -301,7 +301,7 @@ describe("regenerate a chapter with a running pool", () => {
           regenError: "The engine failed.",
         }),
       );
-      expect(new PoolStateStore(h.ctx.db).get().consecutiveFailures).toBe(1);
+      expect(new PoolStateStore(h.ctx.db).service("fake").consecutiveFailures).toBe(1);
       expect(h.logged).toContainEqual(
         expect.objectContaining({ level: "warn", message: expect.stringContaining("chunks") }),
       );

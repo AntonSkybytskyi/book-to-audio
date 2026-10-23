@@ -7,14 +7,14 @@ import type { BookRepository } from "../books/repository.js";
 import type { TextPreparer } from "../convert/chapter-text.js";
 import type { Estimator } from "../speed/estimator.js";
 import { TEXT_PROCESSING_VERSION } from "../text/index.js";
-import type { TtsEngine } from "../tts/engine.js";
+import type { TtsCatalog } from "../tts/catalog.js";
 import { sameOriginOnly } from "../security.js";
 import { sendError } from "./errors.js";
 
 export interface EstimateRouteDeps {
   repo: BookRepository;
   counts: Pick<CountRepository, "chapterTexts">;
-  engine: TtsEngine;
+  catalog: TtsCatalog;
   estimator: Estimator;
   /** The text rules, held to the same few worker threads as the background counting. */
   prepareText: TextPreparer;
@@ -31,14 +31,16 @@ const MAX_PENDING = 3;
  * not converted yet, as if it were read in that language. The preview asks when the picker changes.
  */
 export function registerEstimateRoute(api: FastifyInstance, deps: EstimateRouteDeps) {
-  const { repo, engine, estimator, prepareText } = deps;
+  const { repo, catalog, estimator, prepareText } = deps;
   /** One count per book and language, shared by requests that arrive together. */
   const counts = new Map<string, Promise<number[]>>();
   const pending = new Set<string>();
 
   /** The counts, or null when too many other languages are being worked out already. */
   const countsFor = (bookId: string, language: string): Promise<number[]> | null => {
-    const key = `${bookId}:${language}:${TEXT_PROCESSING_VERSION}`;
+    // The split depends on the voice's service, so a change of voice counts again.
+    const maxChars = catalog.maxCharsFor(language);
+    const key = `${bookId}:${language}:${maxChars}:${TEXT_PROCESSING_VERSION}`;
     let found = counts.get(key);
     if (found) return found;
     if (pending.size >= MAX_PENDING) return null;
@@ -46,7 +48,7 @@ export function registerEstimateRoute(api: FastifyInstance, deps: EstimateRouteD
     found = countPrepared(
       deps.counts.chapterTexts(bookId),
       language,
-      engine.maxInputChars,
+      maxChars,
       prepareText,
     ).finally(() => pending.delete(key));
     counts.set(key, found);

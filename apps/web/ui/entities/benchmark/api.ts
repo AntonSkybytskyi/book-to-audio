@@ -5,6 +5,7 @@ export type {
   BenchmarkState,
   BenchmarkStatus,
   ResultView as BenchmarkResult,
+  BenchmarkServiceView as BenchmarkServiceInfo,
   BenchmarkView as BenchmarkInfo,
 } from "@book-to-audio/contracts";
 

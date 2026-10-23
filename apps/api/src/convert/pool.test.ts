@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { GENERIC_CHAPTER_ERROR } from "../errors.js";
 import { ok, stubConverter, tick, until, usePoolHarness } from "../testing/pool-harness.js";
 import { TtsError } from "../tts/engine.js";
+import { LANGUAGES } from "../books/languages.js";
 
 describe("WorkerPool: one worker", () => {
   const h = usePoolHarness();
@@ -144,7 +145,7 @@ describe("WorkerPool: one worker", () => {
 
     it("re-queues chapters left generating by a restart and keeps their chunks", async () => {
       const id = h.addBook(2);
-      const task = h.queue.claimNext(); // as if the previous process died mid-chapter
+      const task = h.queue.claimNext(LANGUAGES); // as if the previous process died mid-chapter
       if (!task) throw new Error("expected a chapter");
       h.queue.recordChunks(task, 3, 7);
       let resumedWith: { chunksDone: number; chunkCount: number } | undefined;
@@ -162,7 +163,7 @@ describe("WorkerPool: one worker", () => {
 
     it("settles a book that finished right before the restart", async () => {
       const id = h.addBook(1);
-      const task = h.queue.claimNext();
+      const task = h.queue.claimNext(LANGUAGES);
       if (!task) throw new Error("expected a chapter");
       h.queue.markDone(task, "a.webm", 1);
 

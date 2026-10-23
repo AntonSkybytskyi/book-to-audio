@@ -9,7 +9,8 @@ import {
 } from "../convert/convert-chapter.js";
 import { SessionHolder } from "../convert/sessions.js";
 import { chunkText } from "../tts/chunk.js";
-import type { FakeEngine } from "../tts/fake.js";
+import { TtsCatalog } from "../tts/catalog.js";
+import type { FakeEngine } from "./fake-engine.js";
 import { createTestContext, type TestContext } from "./context.js";
 import { fakeEncode, fakeJoin } from "./fake-codec.js";
 
@@ -81,7 +82,7 @@ export function useChapterHarness() {
     extra: Partial<ChapterConverterDeps> = {},
   ) =>
     createChapterConverter({
-      engine,
+      catalog: new TtsCatalog([engine]),
       storage: ctx.storage,
       chunks,
       encode,

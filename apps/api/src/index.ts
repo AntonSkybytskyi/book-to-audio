@@ -1,4 +1,3 @@
-import os from "node:os";
 import path from "node:path";
 import { buildServer } from "./app.js";
 import { concatWebm, encodeWebm } from "./audio/ffmpeg.js";
@@ -29,8 +28,8 @@ import { SettingsStore } from "./settings/settings.js";
 import { SpeedCalibration } from "./speed/calibration.js";
 import { LearningRepository } from "./speed/learning.js";
 import { SpeedLearning } from "./speed/learner.js";
-import { PiperEngine } from "./tts/piper.js";
-import { createEngine } from "./tts/index.js";
+import { benchmarkWorkersOf } from "./convert/worker-target.js";
+import { createCatalog } from "./tts/index.js";
 
 async function main() {
   const config = loadConfig();
@@ -38,19 +37,15 @@ async function main() {
 
   const storage = new Storage(config.dataDir);
   const swept = sweepStorage(db, storage);
-  const engine = createEngine(config);
-  if (engine instanceof PiperEngine) engine.removeLeftovers();
   const bus = new EventBus();
-  const settings = new SettingsStore(db, {
-    cpus: os.availableParallelism(),
-    envWorkers: config.workers,
-  });
+  const settings = new SettingsStore(db);
   // `app` is created right below; the pool only logs through it once started.
   const logger = {
     info: (m: string) => app.log.info(m),
     warn: (c: object, m: string) => app.log.warn(c, m),
     error: (c: object, m: string) => app.log.error(c, m),
   };
+  const catalog = createCatalog(config, { logger });
   const queue = new ChapterQueue(db);
   // Workers never create a book's audio folder (so a deleted book stays deleted); queued books get it here.
   for (const id of queue.activeBookIds()) storage.ensureAudioDir(id);
@@ -61,7 +56,7 @@ async function main() {
   const counter = new PreparedCounter({
     repo: countRepo,
     prepare: prepareText,
-    maxChars: engine.maxInputChars,
+    maxChars: (language) => catalog.maxCharsFor(language),
     bus,
     onIdle: (): void => pool.recheckIdle(),
     logger,
@@ -71,7 +66,7 @@ async function main() {
   const pool = new WorkerPool({
     queue,
     converter: createChapterConverter({
-      engine,
+      catalog,
       storage,
       chunks: new ChunkStore(storage, { minFreeBytes: config.minFreeDiskMb * 1024 ** 2 }),
       encode: (pcm, outputPath, signal) => encodeWebm(pcm, outputPath, encoder, signal),
@@ -80,23 +75,22 @@ async function main() {
       prepareText,
       logger,
     }),
-    engine,
+    catalog,
     state: new PoolStateStore(db),
     settings,
     bus,
     logger,
     busyElsewhere: (): boolean => outputs.anyBusy || counter.busy,
-    learner: new SpeedLearning(engine.id, new SpeedCalibration(benchmarks, learning), learning),
+    learner: new SpeedLearning(new SpeedCalibration(benchmarks, learning), learning),
   });
-  // Piper's scratch folders and the benchmark's share this parent.
   const scratchDir = path.join(config.dataDir, "tmp");
   removeBenchmarkLeftovers(scratchDir);
   const benchmark = new BenchmarkRunner({
-    engine,
+    catalog,
     repo: benchmarks,
     pool,
     bus,
-    workers: () => ({ current: settings.workers(), max: settings.maxWorkers }),
+    workers: benchmarkWorkersOf(catalog, settings),
     scratchDir,
     machine: currentMachine,
     prepare: prepareChunks,
@@ -126,7 +120,7 @@ async function main() {
     db,
     logger: true,
     storage,
-    engine,
+    catalog,
     maxUploadBytes: config.maxUploadMb * 1024 * 1024,
     allowedHosts: config.allowedHosts,
     bus,
@@ -144,6 +138,7 @@ async function main() {
     setTimeout(() => process.exit(1), 8000).unref();
     let code = 0;
     try {
+      catalog.stop();
       await benchmark.shutdown();
       await counter.stop();
       await pool.stop();
@@ -163,6 +158,10 @@ async function main() {
   if (swept.orphanDirs + swept.tempFiles + swept.partsDirs + swept.buildDirs > 0) {
     app.log.info(swept, "removed leftovers of an interrupted run");
   }
+  // Each service gets a few seconds to list its voices; one that does not answer is asked again
+  // in the background, and its chapters wait for it.
+  await catalog.refresh();
+  catalog.start();
   // Interrupted chapters are re-queued before the first request can see them as running.
   pool.start();
   outputs.start();
@@ -174,9 +173,10 @@ async function main() {
   }
   counter.backfill();
   if (benchmark.startIfNeeded()) app.log.info("a speed test will run once nothing is being read");
-  app.log.info(
-    `data directory: ${config.dataDir}, TTS engine: ${engine.id}, workers: ${pool.status().workers}`,
-  );
+  const services = pool
+    .status()
+    .services.map((s) => `${s.id} (${s.reachable ? `${s.workers} workers` : "not answering"})`);
+  app.log.info(`data directory: ${config.dataDir}, TTS services: ${services.join(", ")}`);
 }
 
 main().catch((error: unknown) => {

@@ -12,7 +12,7 @@ describe("the languages setting", () => {
     app = buildServer({
       db: ctx.db,
       storage: ctx.storage,
-      engine: ctx.engine,
+      catalog: ctx.catalog,
       maxUploadBytes: 1024 * 1024,
       parseEpub: ctx.parseEpub,
       bus: ctx.bus,
@@ -41,7 +41,10 @@ describe("the languages setting", () => {
       const res = await patch({ shownLanguages: ["ru", "en"] });
 
       expect(res.statusCode).toBe(200);
-      expect(res.json()).toMatchObject({ shownLanguages: ["en", "ru"], workers: 2 });
+      expect(res.json()).toMatchObject({
+        shownLanguages: ["en", "ru"],
+        services: [{ workers: 2 }],
+      });
       expect(ctx.settings.shownLanguages()).toEqual(["en", "ru"]);
       expect((await app.inject({ url: "/api/settings" })).json()).toMatchObject({
         shownLanguages: ["en", "ru"],
@@ -49,9 +52,9 @@ describe("the languages setting", () => {
     });
 
     it("changes the languages and the workers in one request", async () => {
-      const res = await patch({ shownLanguages: ["uk"], workers: 1 });
+      const res = await patch({ shownLanguages: ["uk"], workers: { fake: 1 } });
 
-      expect(res.json()).toMatchObject({ shownLanguages: ["uk"], workers: 1 });
+      expect(res.json()).toMatchObject({ shownLanguages: ["uk"], services: [{ workers: 1 }] });
     });
 
     it("will not hide every language, and says why", async () => {

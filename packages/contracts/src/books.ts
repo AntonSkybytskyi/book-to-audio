@@ -72,6 +72,9 @@ export interface BookEstimateView {
   /** Converting it from the start with the workers in use. */
   convertSeconds: number;
   source: SpeedSource;
+  /** The TTS service that reads the book's language. */
+  service: string;
+  /** Workers of that service. */
   workers: number;
   /** Where it would stand if it were queued now (for a book that is not queued yet). */
   queue: QueueView;

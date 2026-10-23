@@ -55,7 +55,19 @@ export interface ResultView {
 export interface BenchmarkRowView {
   language: string;
   voiceId: string;
+  /** The TTS service the voice is on. */
+  service: string;
   result: ResultView | null;
+}
+
+/** The workers of one TTS service, for the Speed section. */
+export interface BenchmarkServiceView {
+  id: string;
+  workers: number;
+  /** Most workers measured: the service's reported number, or the one in use when higher. */
+  maxWorkers: number;
+  /** The fewest workers that get close to the best throughput measured on this service; a hint only. */
+  suggestedWorkers: number | null;
 }
 
 export interface MachineInfo {
@@ -66,10 +78,8 @@ export interface MachineInfo {
 /** `GET`, `POST` and `DELETE /api/benchmark`. */
 export interface BenchmarkView extends BenchmarkStatus {
   rows: BenchmarkRowView[];
-  workers: number;
-  maxWorkers: number;
-  /** The fewest workers that get close to the best throughput measured; a hint only. */
-  suggestedWorkers: number | null;
+  /** The services that read a language, in `TTS_SERVICES` order. */
+  services: BenchmarkServiceView[];
   machine: MachineInfo;
   /** A voice has no result, or one that is outdated: a run is due. */
   needsRun: boolean;

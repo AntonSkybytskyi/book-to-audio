@@ -85,29 +85,30 @@ describe("libraryStatus", () => {
 });
 
 describe("bookSummary", () => {
-  it("tells a paused book from a pool that is paused for everything", () => {
-    const own = bookSummary(book({ status: "paused" }), false);
-    const pool = bookSummary(book(), true);
+  it("tells a paused book from a pool that is paused for everything, or its speech service", () => {
+    const own = bookSummary(book({ status: "paused" }), null);
+    const pool = bookSummary(book(), "all");
 
     expect(own).toMatch(/^Paused:/);
     expect(pool).toMatch(/^Waiting: conversion is paused for every book/);
-    expect(bookSummary(book({ status: "paused" }), true)).toMatch(/^Paused:/);
+    expect(bookSummary(book(), "service")).toMatch(/^Waiting: the speech service that reads/);
+    expect(bookSummary(book({ status: "paused" }), "all")).toMatch(/^Paused:/);
   });
 
   it("says whether a paused book is still finishing chapters", () => {
     const running = book({ status: "paused", chapters: [chapter(1, { status: "generating" })] });
 
-    expect(bookSummary(running, false)).toContain("already started will finish");
-    expect(bookSummary(book({ status: "paused" }), false)).toContain("nothing is being read");
+    expect(bookSummary(running, null)).toContain("already started will finish");
+    expect(bookSummary(book({ status: "paused" }), null)).toContain("nothing is being read");
   });
 
   it("covers the other states", () => {
-    expect(bookSummary(book({ status: "ready" }), false)).toBe("Not converted yet.");
-    expect(bookSummary(book(), false)).toBe("Converting: 3 of 10 chapters ready.");
-    expect(bookSummary(book({ status: "done", doneCount: 10 }), false)).toBe(
+    expect(bookSummary(book({ status: "ready" }), null)).toBe("Not converted yet.");
+    expect(bookSummary(book(), null)).toBe("Converting: 3 of 10 chapters ready.");
+    expect(bookSummary(book({ status: "done", doneCount: 10 }), null)).toBe(
       "All 10 chapters are ready, 1:02:05 in total.",
     );
-    expect(bookSummary(book({ status: "done_with_errors", failedCount: 2 }), false)).toBe(
+    expect(bookSummary(book({ status: "done_with_errors", failedCount: 2 }), null)).toBe(
       "Finished with 2 failed chapters. 3 of 10 chapters are ready.",
     );
   });

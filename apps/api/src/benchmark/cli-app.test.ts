@@ -15,7 +15,12 @@ const quiet = {
   "/pool": { state: "running", activeWorkers: 0, held: false },
   "/benchmark": { state: "idle" },
   "/books": { books: [{ status: "done", outputs: { state: "ready" } }] },
-  "/settings": { workers: 3 },
+  "/settings": {
+    services: [
+      { id: "piper", workers: 3 },
+      { id: "qwen", workers: 1 },
+    ],
+  },
 };
 
 const refused: GetJson = async () => {
@@ -29,7 +34,10 @@ describe("inspectApp", () => {
   });
 
   it("calls an app with nothing going on idle, and reads its worker count from the settings", async () => {
-    expect(await inspectApp(3000, app(quiet))).toEqual({ kind: "idle", workers: 3 });
+    expect(await inspectApp(3000, app(quiet))).toEqual({
+      kind: "idle",
+      workers: { piper: 3, qwen: 1 },
+    });
   });
 
   it.each([
@@ -44,7 +52,7 @@ describe("inspectApp", () => {
   ])("is busy with %s", async (reason, change) => {
     const result = await inspectApp(3000, app({ ...quiet, ...change }));
 
-    expect(result).toMatchObject({ kind: "busy", workers: 3 });
+    expect(result).toMatchObject({ kind: "busy", workers: { piper: 3, qwen: 1 } });
     expect(result.kind === "busy" && result.reason).toContain(reason);
   });
 

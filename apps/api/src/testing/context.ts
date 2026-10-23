@@ -15,14 +15,17 @@ import { EventBus } from "../events/bus.js";
 import { OutputBuilder } from "../outputs/builder.js";
 import { OutputRepository } from "../outputs/repository.js";
 import { SettingsStore } from "../settings/settings.js";
+import { TtsCatalog } from "../tts/catalog.js";
 import { fakeEncode, fakeJoin } from "./fake-codec.js";
 import { fakeProducer } from "./fake-outputs.js";
-import { FakeEngine, type FakeEngineOptions } from "../tts/fake.js";
+import { FakeEngine, type FakeEngineOptions } from "./fake-engine.js";
 
 export interface TestContext {
   db: Database.Database;
   storage: Storage;
   engine: FakeEngine;
+  /** The catalog of that one engine. */
+  catalog: TtsCatalog;
   dataDir: string;
   bus: EventBus;
   settings: SettingsStore;
@@ -42,19 +45,20 @@ export function createTestContext(engineOptions?: FakeEngineOptions): TestContex
   const db = openDatabase(dataDir);
   const storage = new Storage(dataDir);
   const engine = new FakeEngine(engineOptions);
+  const catalog = new TtsCatalog([engine]);
   const bus = new EventBus();
-  const settings = new SettingsStore(db, { cpus: 4 });
+  const settings = new SettingsStore(db);
   const pool = new WorkerPool({
     queue: new ChapterQueue(db),
     converter: createChapterConverter({
-      engine,
+      catalog,
       storage,
       chunks: new ChunkStore(storage),
       encode: fakeEncode,
       join: fakeJoin,
       retryDelaysMs: [0, 0, 0],
     }),
-    engine,
+    catalog,
     state: new PoolStateStore(db),
     settings,
     bus,
@@ -71,6 +75,7 @@ export function createTestContext(engineOptions?: FakeEngineOptions): TestContex
     dataDir,
     storage,
     engine,
+    catalog,
     bus,
     settings,
     outputs,

@@ -1,4 +1,5 @@
-# nginx is the only published port. web and core are reached through it and are not published.
+# nginx is the only published port. web and core are reached through it, and core reaches the TTS
+# services; none of them is published.
 services:
   nginx:
     build:
@@ -36,12 +37,40 @@ services:
     image: book-to-audio-core
     environment:
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-200}
+      # name=url of each TTS service, in the order a language's default voice is looked for.
+      TTS_SERVICES: ${TTS_SERVICES:-piper=http://piper-api:5000}
     volumes:
       - book-data:/data
+    depends_on:
+      piper-api:
+        condition: service_healthy
     restart: unless-stopped
-    # Reap ffmpeg / Piper child processes.
+    # Reap ffmpeg child processes.
     init: true
     # Limits, so a hostile or broken book cannot take over the machine.
+    mem_limit: 2g
+    pids_limit: 256
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+
+  # Reads text aloud with Piper and the voices baked into its image (TTS service API, see
+  # packages/contracts/openapi/tts-service.yaml). Holds no data: it only writes scratch WAV files.
+  piper-api:
+    build:
+      context: .
+      dockerfile: apps/piper-api/Dockerfile
+    image: book-to-audio-piper
+    environment:
+      # Requests read at once, and the most Piper processes alive; default half the CPU cores.
+      PIPER_CONCURRENCY: ${PIPER_CONCURRENCY:-}
+    restart: unless-stopped
+    # Reap Piper processes.
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    # Each warm Piper process holds its voice model in memory.
     mem_limit: 3g
     pids_limit: 512
     cap_drop: [ALL]

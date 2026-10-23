@@ -12,6 +12,7 @@ import { DeleteBookDialog } from "@/ui/entities/book/DeleteBookDialog";
 import { useLiveEvents } from "@/ui/shared/api/events";
 import { isLiveEvent, patchLibrary } from "@/ui/entities/book/live-patch";
 import { useLiveQuery } from "@/ui/shared/api/use-live-query";
+import { pauseFor } from "@/ui/entities/pool/pool";
 import { usePool } from "@/ui/entities/pool/use-pool";
 import { Notice } from "@/ui/shared/ui/Notice";
 import { ProgressBar } from "@/ui/shared/ui/ProgressBar";
@@ -47,7 +48,7 @@ function Shelf({ onRetry }: { onRetry: () => void }) {
       [patch],
     ),
   );
-  const poolPaused = usePool()?.state === "paused";
+  const pool = usePool();
   const [deleting, setDeleting] = useState<BookSummary | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
 
@@ -109,7 +110,7 @@ function Shelf({ onRetry }: { onRetry: () => void }) {
                 {[book.author, languageName(book.language)].filter(Boolean).join(" · ")}
               </p>
               <p className="text-[0.9rem] text-ink wrap-anywhere">
-                {libraryStatus(book, poolPaused)}
+                {libraryStatus(book, pauseFor(pool, book.estimate?.service))}
               </p>
               {(book.status === "converting" || book.status === "paused") && (
                 <ProgressBar

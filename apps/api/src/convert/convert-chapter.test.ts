@@ -7,9 +7,10 @@ import type { TestContext } from "../testing/context.js";
 import { chunkText } from "../tts/chunk.js";
 import { TEXT_PROCESSING_VERSION } from "../text/index.js";
 import { TtsError } from "../tts/engine.js";
-import { FakeEngine, type FakeEngineOptions } from "../tts/fake.js";
+import { FakeEngine, type FakeEngineOptions } from "../testing/fake-engine.js";
 import { ChunkStore, type ChunkStoreOptions } from "./chunk-store.js";
 import { createChapterConverter } from "./convert-chapter.js";
+import { TtsCatalog } from "../tts/catalog.js";
 
 describe("createChapterConverter", () => {
   const harness = useChapterHarness();
@@ -269,10 +270,17 @@ describe("createChapterConverter", () => {
     expect(retryDelays).toEqual([]);
   });
 
-  it("fails when the engine has no voice for the language", async () => {
+  it("gives the chapter back when its language has no voice, or the voice is on another service", async () => {
     await expect(
       converter().convert(run(ctx.engine, { task: task({ language: "uk" }) })),
-    ).rejects.toMatchObject({ code: "voice_not_found", message: expect.stringContaining("uk") });
+    ).rejects.toMatchObject({ code: "aborted" });
+    const other = new FakeEngine({
+      id: "other",
+      voices: [{ id: "o-en", language: "en", name: "O", sampleRate: 22_050 }],
+    });
+    await expect(converter(other).convert(run(ctx.engine))).rejects.toMatchObject({
+      code: "aborted",
+    });
   });
 
   it("fails a chapter without text instead of encoding silence", async () => {
@@ -302,7 +310,7 @@ describe("createChapterConverter", () => {
     const controller = new AbortController();
     const engine = new FakeEngine({ failMarker: "number 7." });
     const fast = createChapterConverter({
-      engine,
+      catalog: new TtsCatalog([engine]),
       storage: ctx.storage,
       chunks: store,
       encode,

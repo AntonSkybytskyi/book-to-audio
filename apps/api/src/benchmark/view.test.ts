@@ -3,6 +3,7 @@ import { CHAPTER_OVERHEAD_SECONDS } from "../speed/calibration.js";
 import { TEXT_PROCESSING_VERSION } from "../text/index.js";
 import { createTestContext, type TestContext } from "../testing/context.js";
 import { TimedEngine } from "../testing/timed-engine.js";
+import { TtsCatalog } from "../tts/catalog.js";
 import { BenchmarkRepository, type VoiceMeasurement } from "./repository.js";
 import { IDLE_STATUS } from "./status.js";
 import { toBenchmarkView } from "./view.js";
@@ -44,13 +45,15 @@ describe("toBenchmarkView", () => {
 
   afterEach(() => ctx.cleanup());
 
+  const catalog = new TtsCatalog([engine]);
+
   const view = (workers = 2, thisMachine = machine) =>
     toBenchmarkView({
-      engine,
+      catalog,
       repo,
       status: IDLE_STATUS,
       machine: thisMachine,
-      workers: { current: workers, max: 12 },
+      workers: () => ({ current: workers, max: 12 }),
       needsRun: false,
     });
 
@@ -126,20 +129,22 @@ describe("toBenchmarkView", () => {
       measurement("t-ru", "ru", [19, 20, 27, 28]),
     );
 
-    expect(view().suggestedWorkers).toBe(3);
+    expect(view().services).toEqual([
+      { id: "timed", workers: 2, maxWorkers: 12, suggestedWorkers: 3 },
+    ]);
   });
 
   it("has no suggestion before anything was measured", () => {
-    expect(view().suggestedWorkers).toBeNull();
+    expect(view().services[0]?.suggestedWorkers).toBeNull();
   });
 
   it("carries the state of a run and the machine along", () => {
     const running = toBenchmarkView({
-      engine,
+      catalog,
       repo,
       status: { ...IDLE_STATUS, state: "running", progress: 0.5, language: "en" },
       machine,
-      workers: { current: 2, max: 12 },
+      workers: () => ({ current: 2, max: 12 }),
       needsRun: true,
     });
 
@@ -148,8 +153,7 @@ describe("toBenchmarkView", () => {
       progress: 0.5,
       language: "en",
       machine,
-      workers: 2,
-      maxWorkers: 12,
+      services: [{ id: "timed", workers: 2, maxWorkers: 12, suggestedWorkers: null }],
       needsRun: true,
     });
   });

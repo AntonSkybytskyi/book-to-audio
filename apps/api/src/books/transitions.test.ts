@@ -4,6 +4,7 @@ import { createTestContext, type TestContext } from "../testing/context.js";
 import { ChapterQueue } from "./queue.js";
 import { BookRepository } from "./repository.js";
 import { BookTransitions } from "./transitions.js";
+import { LANGUAGES } from "./languages.js";
 
 describe("BookTransitions", () => {
   let ctx: TestContext;
@@ -30,7 +31,7 @@ describe("BookTransitions", () => {
   };
 
   const claim = () => {
-    const task = queue.claimNext();
+    const task = queue.claimNext(LANGUAGES);
     if (!task) throw new Error("expected a chapter");
     return task;
   };
@@ -85,7 +86,7 @@ describe("BookTransitions", () => {
 
       transitions.pause(id);
 
-      expect(queue.claimNext()).toBeNull();
+      expect(queue.claimNext(LANGUAGES)).toBeNull();
       expect(statuses(id)).toEqual(["generating", "queued", "queued"]);
       expect(queue.markDone(running, "a.webm", 1)).toBe(true);
     });
@@ -154,7 +155,7 @@ describe("BookTransitions", () => {
 
       expect(ids).toHaveLength(3);
       expect(statuses(id)).toEqual(["generating", "generating", "generating"]);
-      expect(queue.claimNext()).toBeNull();
+      expect(queue.claimNext(LANGUAGES)).toBeNull();
       expect(queue.recordChunks(running, 1, 2)).toBe(false);
       expect(queue.markDone(running, "a.webm", 1)).toBe(false);
       expect(queue.requeue(running)).toBe(false);
@@ -262,7 +263,7 @@ describe("BookTransitions", () => {
       ctx.db.prepare("UPDATE books SET status = 'paused' WHERE id = ?").run(id);
 
       expect(transitions.restart(id, { position: 1, fresh: true })?.status).toBe("paused");
-      expect(queue.claimNext()).toBeNull();
+      expect(queue.claimNext(LANGUAGES)).toBeNull();
     });
 
     it("does nothing for a book that has not been queued or does not exist", () => {

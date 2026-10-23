@@ -1,6 +1,7 @@
 import { conversionSeconds, remainingAudio } from "@book-to-audio/contracts";
 import type { Book, BookEstimate, BookSummary } from "./api";
 import type { PoolStatus } from "@/ui/entities/pool/api";
+import { pauseFor, servicePool } from "@/ui/entities/pool/pool";
 import type { SpeedSource } from "@book-to-audio/contracts";
 import { aboutDuration, formatApprox, pluralize } from "@/ui/shared/lib/format";
 
@@ -38,10 +39,15 @@ export function bookTimeLeft(
   if (!left || (book.status !== "converting" && book.status !== "paused")) return null;
   if (book.status === "paused")
     return "Time left: paused. It shows again when you resume the book.";
-  if (pool?.state === "paused" || left.state === "pool_paused") {
+  const service = book.estimate?.service;
+  const pause = pauseFor(pool, service);
+  if (pause === "service") {
+    return "Time left: paused, because the speech service that reads this book is paused.";
+  }
+  if (pause === "all" || left.state === "pool_paused") {
     return "Time left: paused, because all conversion is paused.";
   }
-  const workers = pool?.workers ?? book.estimate?.workers ?? 1;
+  const workers = servicePool(pool, service)?.workers ?? book.estimate?.workers ?? 1;
   const remaining = remainingNow(book, workers);
   if (remaining === null) return null;
   const rough = roughNote(left.source);

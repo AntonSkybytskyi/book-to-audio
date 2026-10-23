@@ -12,7 +12,8 @@ export interface CounterLogger {
 export interface CounterDeps {
   repo: Pick<CountRepository, "bookLanguage" | "pending" | "setCounts" | "uncountedBookIds">;
   prepare: TextPreparer;
-  maxChars: number;
+  /** Longest text one request accepts for the language's voice: how the text is split. */
+  maxChars: (language: string) => number;
   bus: EventBus;
   /** Shared with whatever else runs the text rules, so only a few worker threads exist at once. */
   limiter?: Limiter;
@@ -143,7 +144,7 @@ export class PreparedCounter {
       const counted = await countPreparedDetailed(
         pending.map((chapter) => chapter.text),
         language,
-        maxChars,
+        maxChars(language),
         (text, lang, max, signal) =>
           this.limiter.run(() => {
             budget.start();

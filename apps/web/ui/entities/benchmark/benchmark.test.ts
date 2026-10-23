@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { BenchmarkInfo, BenchmarkResult } from "./api";
+import type { BenchmarkInfo, BenchmarkResult, BenchmarkServiceInfo } from "./api";
 import {
   benchmarkBusy,
   benchmarkStatusLine,
@@ -14,6 +14,14 @@ import {
 } from "./benchmark";
 import type { BenchmarkEvent } from "./events";
 
+const service = (overrides: Partial<BenchmarkServiceInfo> = {}): BenchmarkServiceInfo => ({
+  id: "piper",
+  workers: 2,
+  maxWorkers: 12,
+  suggestedWorkers: null,
+  ...overrides,
+});
+
 const info = (overrides: Partial<BenchmarkInfo> = {}): BenchmarkInfo => ({
   state: "idle",
   trigger: null,
@@ -24,9 +32,7 @@ const info = (overrides: Partial<BenchmarkInfo> = {}): BenchmarkInfo => ({
   error: null,
   expectedSeconds: 180,
   rows: [],
-  workers: 2,
-  maxWorkers: 12,
-  suggestedWorkers: null,
+  services: [service()],
   machine: { cpuCount: 12, cpuModel: "Test" },
   needsRun: false,
   ...overrides,
@@ -47,7 +53,9 @@ const event = (overrides: Partial<BenchmarkEvent> = {}): BenchmarkEvent => ({
 
 describe("patchBenchmark", () => {
   it("follows the state and progress of a run, and keeps the results", () => {
-    const before = info({ rows: [{ language: "en", voiceId: "v", result: null }] });
+    const before = info({
+      rows: [{ language: "en", voiceId: "piper:v", service: "piper", result: null }],
+    });
 
     const after = patchBenchmark(
       before,
@@ -154,17 +162,17 @@ describe("benchmarkStatusLine", () => {
 
 describe("workersHint", () => {
   it("has no hint without results", () => {
-    expect(workersHint(info())).toBeNull();
+    expect(workersHint(service())).toBeNull();
   });
 
   it("agrees when the setting is already the best", () => {
-    expect(workersHint(info({ suggestedWorkers: 2, workers: 2 }))).toMatch(
+    expect(workersHint(service({ suggestedWorkers: 2, workers: 2 }))).toMatch(
       /agrees with your setting of 2 workers/,
     );
   });
 
   it("suggests another count, as a hint only", () => {
-    const hint = workersHint(info({ suggestedWorkers: 3, workers: 6 }));
+    const hint = workersHint(service({ suggestedWorkers: 3, workers: 6 }));
 
     expect(hint).toMatch(/suggests 3 workers/);
     expect(hint).toMatch(/You have 6 workers/);
@@ -172,7 +180,13 @@ describe("workersHint", () => {
   });
 
   it("says one worker, not 1 workers", () => {
-    expect(workersHint(info({ suggestedWorkers: 1, workers: 4 }))).toMatch(/suggests 1 worker,/);
+    expect(workersHint(service({ suggestedWorkers: 1, workers: 4 }))).toMatch(/suggests 1 worker,/);
+  });
+
+  it("names the service when there are several", () => {
+    expect(workersHint(service({ suggestedWorkers: 3, workers: 2 }), true)).toMatch(
+      /suggests 3 workers for “piper”/,
+    );
   });
 });
 

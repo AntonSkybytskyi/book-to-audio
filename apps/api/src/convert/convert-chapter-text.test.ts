@@ -6,9 +6,10 @@ import { spokenBy, task, useChapterHarness } from "../testing/chapter-harness.js
 import type { TestContext } from "../testing/context.js";
 import { TEXT_PROCESSING_VERSION } from "../text/index.js";
 import { TtsError } from "../tts/engine.js";
-import { FakeEngine } from "../tts/fake.js";
+import { FakeEngine } from "../testing/fake-engine.js";
 import type { TextPreparer } from "./chapter-text.js";
 import type { ChunkStore } from "./chunk-store.js";
+import { TtsCatalog } from "../tts/catalog.js";
 
 describe("the text of a chapter and the speaker", () => {
   const harness = useChapterHarness();
@@ -145,7 +146,7 @@ describe("the text of a chapter and the speaker", () => {
     const job = run(engine, { task: ukTask({ text: LONG }) });
 
     await newer({
-      engine,
+      catalog: new TtsCatalog([engine]),
       storage: ctx.storage,
       chunks: store,
       encode,

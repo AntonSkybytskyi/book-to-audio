@@ -59,7 +59,7 @@ jobs:
         with:
           file: apps/${{ matrix.app }}/Dockerfile
           push: false
-          # Keeps the layers between runs, each image in its own cache (Piper and the voices for api).
+          # Keeps the layers between runs, each image in its own cache (Piper and the voices for piper-api).
           cache-from: type=gha,scope=${{ matrix.app }}
           cache-to: type=gha,mode=max,scope=${{ matrix.app }}
 

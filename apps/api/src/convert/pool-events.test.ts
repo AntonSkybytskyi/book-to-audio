@@ -42,6 +42,17 @@ describe("WorkerPool: events", () => {
         workers: 1,
         activeWorkers: 1,
         held: false,
+        services: [
+          {
+            id: "fake",
+            state: "running",
+            error: null,
+            reachable: true,
+            workers: 1,
+            reportedWorkers: 2,
+            activeWorkers: 1,
+          },
+        ],
       });
     });
 
@@ -53,13 +64,16 @@ describe("WorkerPool: events", () => {
           throw new TtsError("synthesis_failed", "Engine down.");
         }),
       );
-      await until(() => h.pool?.status().state === "paused");
+      await until(() => h.pool?.status().services[0]?.state === "paused");
 
       expect(h.events).toContainEqual(
         expect.objectContaining({ type: "chapter", status: "failed", error: "Engine down." }),
       );
       expect(h.events).toContainEqual(
-        expect.objectContaining({ type: "pool", state: "paused", error: "Engine down." }),
+        expect.objectContaining({
+          type: "pool",
+          services: [expect.objectContaining({ state: "paused", error: "Engine down." })],
+        }),
       );
     });
 
@@ -67,7 +81,7 @@ describe("WorkerPool: events", () => {
       const p = h.start(stubConverter(ok));
       h.events.length = 0;
 
-      p.setWorkers(2);
+      h.setWorkers(2);
       p.resume();
 
       expect(h.events.map((e) => e.type)).toEqual(["pool", "pool"]);

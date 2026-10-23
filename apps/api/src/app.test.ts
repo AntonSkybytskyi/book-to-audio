@@ -15,7 +15,7 @@ describe("buildServer", () => {
     app = buildServer({
       db,
       storage: ctx.storage,
-      engine: ctx.engine,
+      catalog: ctx.catalog,
       maxUploadBytes: 1024 * 1024,
       parseEpub: ctx.parseEpub,
       bus: ctx.bus,
@@ -88,7 +88,7 @@ describe("buildServer", () => {
     const server = buildServer({
       db,
       storage: ctx.storage,
-      engine: ctx.engine,
+      catalog: ctx.catalog,
       maxUploadBytes: 1024,
       parseEpub: ctx.parseEpub,
       bus: ctx.bus,

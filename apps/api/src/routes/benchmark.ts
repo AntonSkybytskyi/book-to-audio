@@ -6,15 +6,15 @@ import {
 } from "../benchmark/runner.js";
 import { toBenchmarkView, type BenchmarkView } from "../benchmark/view.js";
 import type { BenchmarkRepository, MachineInfo } from "../benchmark/repository.js";
-import type { SettingsStore } from "../settings/settings.js";
-import type { TtsEngine } from "../tts/engine.js";
+import type { TtsCatalog } from "../tts/catalog.js";
 import { sendError } from "./errors.js";
 
 export interface BenchmarkRouteDeps {
   runner: Pick<BenchmarkRunner, "status" | "start" | "cancel" | "needsRun" | "busy">;
   repo: BenchmarkRepository;
-  engine: TtsEngine;
-  settings: Pick<SettingsStore, "workers" | "maxWorkers">;
+  catalog: TtsCatalog;
+  /** A TTS service's worker count in use, and the most sessions worth comparing on it. */
+  workers: (service: string) => { current: number; max: number };
   machine: () => MachineInfo;
 }
 
@@ -24,14 +24,14 @@ export interface BenchmarkRouteDeps {
  * waiting); `DELETE` cancels it (409 when none is running).
  */
 export function registerBenchmarkRoutes(api: FastifyInstance, deps: BenchmarkRouteDeps) {
-  const { runner, repo, engine, settings, machine } = deps;
+  const { runner, repo, catalog, workers, machine } = deps;
   const view = (): BenchmarkView =>
     toBenchmarkView({
-      engine,
+      catalog,
       repo,
       status: runner.status(),
       machine: machine(),
-      workers: { current: settings.workers(), max: settings.maxWorkers },
+      workers,
       needsRun: runner.needsRun(),
     });
 

@@ -1,8 +1,11 @@
 /** What the running app (if any) is doing, as far as the benchmark CLI can tell from its API. */
 export type AppActivity =
   | { kind: "unreachable" }
-  | { kind: "idle"; workers: number | null }
-  | { kind: "busy"; reason: string; workers: number | null };
+  | { kind: "idle"; workers: ServiceWorkers | null }
+  | { kind: "busy"; reason: string; workers: ServiceWorkers | null };
+
+/** The workers in use per TTS service, by service name. */
+export type ServiceWorkers = Record<string, number>;
 
 export type GetJson = (url: string) => Promise<unknown>;
 
@@ -26,8 +29,8 @@ interface BookBody {
 /**
  * Asks the app on `port` whether anything is reading, converting, building downloads or testing the
  * speed, since the benchmark would compete with it. An app that cannot be reached is `unreachable`,
- * which is not the same as idle: the CLI says so and carries on. The worker count in the settings is
- * returned too, so the benchmark compares the number the app really uses.
+ * which is not the same as idle: the CLI says so and carries on. The worker count of each service in
+ * the settings is returned too, so the benchmark compares the number the app really uses.
  */
 export async function inspectApp(port: number, get: GetJson = defaultGet): Promise<AppActivity> {
   const base = `http://127.0.0.1:${port}/api`;
@@ -47,9 +50,13 @@ export async function inspectApp(port: number, get: GetJson = defaultGet): Promi
   const [benchmark, books, settings] = await Promise.all([
     attempt<{ state?: string }>("/benchmark"),
     attempt<{ books?: BookBody[] }>("/books"),
-    attempt<{ workers?: number }>("/settings"),
+    attempt<{ services?: { id?: unknown; workers?: unknown }[] }>("/settings"),
   ]);
-  const workers = typeof settings?.workers === "number" ? settings.workers : null;
+  const listed = Array.isArray(settings?.services) ? settings.services : [];
+  const pairs = listed.flatMap((s) =>
+    typeof s.id === "string" && typeof s.workers === "number" ? [[s.id, s.workers] as const] : [],
+  );
+  const workers = pairs.length > 0 ? Object.fromEntries(pairs) : null;
   const busy = (reason: string): AppActivity => ({ kind: "busy", reason, workers });
 
   if ((pool.activeWorkers ?? 0) > 0) return busy("a chapter is being read");

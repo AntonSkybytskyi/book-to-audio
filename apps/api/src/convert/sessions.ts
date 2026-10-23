@@ -21,6 +21,11 @@ export class SessionHolder {
     private readonly options: SessionHolderOptions = {},
   ) {}
 
+  /** The engine whose sessions this holds. */
+  get engineId(): string {
+    return this.engine.id;
+  }
+
   get isOpen(): boolean {
     return this.current !== null;
   }

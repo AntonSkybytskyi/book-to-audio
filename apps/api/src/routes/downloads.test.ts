@@ -27,7 +27,7 @@ describe("download routes", () => {
     app = buildServer({
       db: h.ctx.db,
       storage: h.ctx.storage,
-      engine: h.ctx.engine,
+      catalog: h.ctx.catalog,
       maxUploadBytes: 1024 * 1024,
       bus: h.ctx.bus,
       pool: h.ctx.pool,
