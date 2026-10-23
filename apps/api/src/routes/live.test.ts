@@ -521,6 +521,14 @@ describe("live updates and pool routes", () => {
 
       expect(res.json()).toEqual({
         services: [{ id: "fake", reachable: true, reported: 2, override: null, workers: 2 }],
+        voices: [
+          {
+            language: "en",
+            voice: "fake-en",
+            chosen: null,
+            options: [{ id: "fake-en", service: "fake", name: "Fake English" }],
+          },
+        ],
         maxWorkers: 64,
         shownLanguages: ["en", "uk"],
       });

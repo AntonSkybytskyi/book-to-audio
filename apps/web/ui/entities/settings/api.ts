@@ -11,6 +11,13 @@ export const saveWorkers = (service: string, workers: number | null) =>
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ workers: { [service]: workers } }),
   });
+/** The voice of a language; null goes back to the default. */
+export const saveVoice = (language: Language, voice: string | null) =>
+  request<SettingsView>("/api/settings", {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ voices: { [language]: voice } }),
+  });
 export const saveShownLanguages = (shownLanguages: Language[]) =>
   request<SettingsView>("/api/settings", {
     method: "PATCH",

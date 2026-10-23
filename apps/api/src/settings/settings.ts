@@ -29,6 +29,17 @@ export class SettingsStore {
     this.write(`workers.${service}`, String(count));
   }
 
+  /** The voice the owner picked for a language, or undefined for the default. */
+  voice(language: string): string | undefined {
+    return this.read(`voice.${language}`);
+  }
+
+  /** Null goes back to the default voice. Whether the voice exists is for the caller to check. */
+  setVoice(language: Language, voiceId: string | null): void {
+    if (voiceId === null) this.remove(`voice.${language}`);
+    else this.write(`voice.${language}`, voiceId);
+  }
+
   /** The saved languages of the picker, else English and Ukrainian. */
   shownLanguages(): Language[] {
     const saved = this.read("shown_languages");

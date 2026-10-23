@@ -38,7 +38,7 @@ const measuredAt = (iso: string) =>
 
 /**
  * The speed test: how fast each voice reads, and the button to measure again. `workers` stands for
- * the worker counts in use; the results are asked for again when it changes.
+ * the worker counts and voices in use; the results are asked for again when it changes.
  */
 export function SpeedSection({ workers }: { workers: string }) {
   const { data: info, error, setData, refresh } = useBenchmark();

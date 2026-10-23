@@ -45,7 +45,10 @@ async function main() {
     warn: (c: object, m: string) => app.log.warn(c, m),
     error: (c: object, m: string) => app.log.error(c, m),
   };
-  const catalog = createCatalog(config, { logger });
+  const catalog = createCatalog(config, {
+    logger,
+    chosenVoice: (language) => settings.voice(language),
+  });
   const queue = new ChapterQueue(db);
   // Workers never create a book's audio folder (so a deleted book stays deleted); queued books get it here.
   for (const id of queue.activeBookIds()) storage.ensureAudioDir(id);

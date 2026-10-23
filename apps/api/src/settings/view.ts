@@ -1,4 +1,4 @@
-import { MAX_WORKERS, type SettingsView } from "@book-to-audio/contracts";
+import { LANGUAGES, MAX_WORKERS, type SettingsView } from "@book-to-audio/contracts";
 import { workerTarget } from "../convert/worker-target.js";
 import type { TtsCatalog } from "../tts/catalog.js";
 import type { SettingsStore } from "./settings.js";
@@ -15,6 +15,20 @@ export function settingsView(settings: SettingsStore, catalog: TtsCatalog): Sett
         override: override ?? null,
         workers: workerTarget(engine, override),
       };
+    }),
+    voices: LANGUAGES.flatMap((language) => {
+      const options = catalog
+        .voices()
+        .filter((voice) => voice.language === language)
+        .map(({ id, engine, name, speaker }) => ({
+          id,
+          service: engine,
+          name,
+          ...(speaker === undefined ? {} : { speaker }),
+        }));
+      const chosen = settings.voice(language) ?? null;
+      if (options.length === 0 && chosen === null) return [];
+      return [{ language, voice: catalog.voiceFor(language)?.id ?? null, chosen, options }];
     }),
     maxWorkers: MAX_WORKERS,
     shownLanguages: settings.shownLanguages(),

@@ -11,6 +11,7 @@ import { LoadState } from "@/ui/shared/ui/LoadState";
 import { Page } from "@/ui/shared/ui/Page";
 import { SettingsSection } from "./SettingsSection";
 import { SpeedSection } from "./SpeedSection";
+import { VoicesSection } from "./VoicesSection";
 import { WorkersSection } from "./WorkersSection";
 
 const HELP = "max-w-[38rem] text-ink-muted";
@@ -59,10 +60,15 @@ export function SettingsView() {
         Settings
       </h1>
 
+      <VoicesSection settings={settings} onSaved={setData} />
+
       <WorkersSection settings={settings} onSaved={setData} />
 
       <SpeedSection
-        workers={settings.services.map((service) => `${service.id}=${service.workers}`).join(",")}
+        workers={[
+          ...settings.services.map((service) => `${service.id}=${service.workers}`),
+          ...settings.voices.map((v) => `${v.language}=${v.voice}`),
+        ].join(",")}
       />
 
       <SettingsSection titleId="languages-title" title="Languages">

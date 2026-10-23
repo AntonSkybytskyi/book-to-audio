@@ -82,3 +82,83 @@ describe("the languages setting", () => {
     });
   });
 });
+
+describe("the voice of each language", () => {
+  let ctx: TestContext;
+  let app: FastifyInstance;
+  const voice = (id: string, language: string) => ({ id, language, name: id, sampleRate: 22_050 });
+
+  beforeEach(() => {
+    ctx = createTestContext({
+      voices: [voice("fake:lessac", "en"), voice("fake:amy", "en"), voice("fake:lada", "uk")],
+    });
+    app = buildServer({
+      db: ctx.db,
+      storage: ctx.storage,
+      catalog: ctx.catalog,
+      maxUploadBytes: 1024 * 1024,
+      parseEpub: ctx.parseEpub,
+      bus: ctx.bus,
+      pool: ctx.pool,
+      outputs: ctx.outputs,
+      settings: ctx.settings,
+    });
+  });
+
+  afterEach(async () => {
+    await app.close();
+    ctx.cleanup();
+  });
+
+  const patch = (payload: unknown) =>
+    app.inject({ method: "PATCH", url: "/api/settings", payload: payload as object });
+
+  it("lists each language's voices, the one in use and the one chosen", async () => {
+    const res = await app.inject({ url: "/api/settings" });
+
+    expect(res.json().voices).toEqual([
+      {
+        language: "en",
+        voice: "fake:lessac",
+        chosen: null,
+        options: [
+          { id: "fake:lessac", service: "fake", name: "fake:lessac" },
+          { id: "fake:amy", service: "fake", name: "fake:amy" },
+        ],
+      },
+      {
+        language: "uk",
+        voice: "fake:lada",
+        chosen: null,
+        options: [{ id: "fake:lada", service: "fake", name: "fake:lada" }],
+      },
+    ]);
+  });
+
+  it("reads a language with the chosen voice, keeps it, and goes back to the default on null", async () => {
+    const chosen = await patch({ voices: { en: "fake:amy" } });
+
+    expect(chosen.statusCode).toBe(200);
+    expect(chosen.json().voices[0]).toMatchObject({ voice: "fake:amy", chosen: "fake:amy" });
+    expect(ctx.catalog.voiceFor("en")?.id).toBe("fake:amy");
+    expect(ctx.settings.voice("en")).toBe("fake:amy");
+
+    const reset = await patch({ voices: { en: null } });
+
+    expect(reset.json().voices[0]).toMatchObject({ voice: "fake:lessac", chosen: null });
+  });
+
+  it.each([
+    ["an unknown voice", { voices: { en: "fake:nope" } }],
+    ["a voice of another language", { voices: { en: "fake:lada" } }],
+    ["an unknown language", { voices: { de: "fake:lessac" } }],
+    ["an empty id", { voices: { en: "" } }],
+    ["no language", { voices: {} }],
+  ])("refuses %s and changes nothing", async (_name, payload) => {
+    const res = await patch(payload);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({ error: "bad_request" });
+    expect(ctx.settings.voice("en")).toBeUndefined();
+  });
+});

@@ -38,6 +38,19 @@ describe("SettingsStore", () => {
     });
   });
 
+  describe("voices", () => {
+    it("has none chosen until the owner picks one, keeps it, and forgets it on null", () => {
+      expect(store().voice("en")).toBeUndefined();
+
+      store().setVoice("en", "piper:en_US-lessac-medium");
+      expect(store().voice("en")).toBe("piper:en_US-lessac-medium");
+      expect(store().voice("uk")).toBeUndefined();
+
+      store().setVoice("en", null);
+      expect(store().voice("en")).toBeUndefined();
+    });
+  });
+
   describe("shown languages", () => {
     it("are English and Ukrainian by default: Russian is supported but hidden", () => {
       expect(store().shownLanguages()).toEqual(["en", "uk"]);

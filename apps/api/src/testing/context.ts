@@ -45,9 +45,9 @@ export function createTestContext(engineOptions?: FakeEngineOptions): TestContex
   const db = openDatabase(dataDir);
   const storage = new Storage(dataDir);
   const engine = new FakeEngine(engineOptions);
-  const catalog = new TtsCatalog([engine]);
   const bus = new EventBus();
   const settings = new SettingsStore(db);
+  const catalog = new TtsCatalog([engine], { chosenVoice: (language) => settings.voice(language) });
   const pool = new WorkerPool({
     queue: new ChapterQueue(db),
     converter: createChapterConverter({
