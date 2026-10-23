@@ -1,0 +1,20 @@
+# The edge for `pnpm dev`: the same nginx image and config as in production, in front of web and
+# core running on this machine (`pnpm dev` starts them on 127.0.0.1:3001 and 127.0.0.1:3002).
+name: book-to-audio-dev
+
+services:
+  nginx:
+    build:
+      context: .
+      dockerfile: apps/edge/Dockerfile
+    image: book-to-audio-edge
+    ports:
+      - "127.0.0.1:${BOOK_TO_AUDIO_PORT:-3000}:8080"
+    environment:
+      # Docker Desktop's name for the host machine.
+      WEB_UPSTREAM: host.docker.internal:${WEB_PORT:-3001}
+      CORE_UPSTREAM: host.docker.internal:${CORE_PORT:-3002}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-200}
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
