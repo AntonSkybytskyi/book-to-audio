@@ -1,0 +1,169 @@
+openapi: 3.1.0
+info:
+  title: TTS service
+  version: 1.0.0
+  description: |
+    The API every text-to-speech service implements so book-to-audio can read books with its voices.
+    The app is pointed at services with `TTS_SERVICES=name=url,...` and puts the service name in
+    front of each voice id (`piper:en_US-lessac-medium`), so voice ids only need to be unique within
+    one service.
+
+    A client that disconnects before the answer cancels the work.
+servers:
+  - url: http://piper-api:5000
+    description: The Piper service in docker-compose.yml
+paths:
+  /health:
+    get:
+      summary: Whether the service can read text aloud
+      operationId: health
+      responses:
+        "200":
+          description: Ready.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    const: ok
+        "503":
+          description: Not ready, for example no voices are installed.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, reason]
+                properties:
+                  status:
+                    const: error
+                  reason:
+                    type: string
+  /voices:
+    get:
+      summary: The service's voices and limits
+      operationId: voices
+      responses:
+        "200":
+          description: Voices, the ones the service prefers first.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TtsVoicesResponse"
+  /synthesize:
+    post:
+      summary: Read one text aloud
+      operationId: synthesize
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TtsSynthesizeRequest"
+      responses:
+        "200":
+          description: 16-bit mono PCM in a WAV file. The sample rate is in the WAV header.
+          content:
+            audio/wav:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: "`voice_not_found`: the service has no such voice."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TtsServiceError"
+        "422":
+          description: >-
+            `bad_input`: this text cannot be read aloud, for example it is empty, longer than
+            `maxInputChars`, or the engine produced no audio for it. Says nothing about the service's
+            health, so clients do not retry it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TtsServiceError"
+        "500":
+          description: "`synthesis_failed`: the engine failed while reading the text."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TtsServiceError"
+        "503":
+          description: "`engine_unavailable`: the engine could not be started."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TtsServiceError"
+        "504":
+          description: "`timeout`: the engine took too long. Time spent waiting in the queue does not count."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TtsServiceError"
+components:
+  schemas:
+    TtsServiceError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [voice_not_found, bad_input, synthesis_failed, timeout, engine_unavailable]
+        message:
+          type: string
+          description: One sentence the app can show to the user.
+        detail:
+          type: string
+          description: Technical detail for the logs.
+    TtsServiceVoice:
+      type: object
+      required: [id, language, name, sampleRate]
+      properties:
+        id:
+          type: string
+          description: Unique within the service.
+          examples: ["uk_UA-ukrainian_tts-medium:lada"]
+        language:
+          type: string
+          description: Two-letter language code.
+          examples: [uk]
+        name:
+          type: string
+        sampleRate:
+          type: integer
+          description: Sample rate of the audio the voice produces, in Hz.
+          examples: [22050]
+        speaker:
+          type: string
+          description: The speaker of a multi-speaker model.
+    TtsVoicesResponse:
+      type: object
+      required: [voices, maxInputChars, concurrency]
+      properties:
+        voices:
+          type: array
+          items:
+            $ref: "#/components/schemas/TtsServiceVoice"
+        maxInputChars:
+          type: integer
+          minimum: 1
+          description: Longest text, in characters, that one `POST /synthesize` accepts.
+        concurrency:
+          type: integer
+          minimum: 1
+          description: >-
+            How many `POST /synthesize` requests the service handles at once. More wait in its
+            queue. The app runs this many workers for the service unless the owner sets another number.
+    TtsSynthesizeRequest:
+      type: object
+      required: [voice, text]
+      additionalProperties: false
+      properties:
+        voice:
+          type: string
+          description: A voice id from `GET /voices`.
+        text:
+          type: string
+          minLength: 1

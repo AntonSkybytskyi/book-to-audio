@@ -2,7 +2,7 @@
   "name": "@book-to-audio/contracts",
   "version": "0.1.0",
   "private": true,
-  "description": "Request, response and event types shared by the web UI and the core API",
+  "description": "Request, response and event types shared by the web UI, the core API and the TTS services",
   "type": "module",
   "exports": {
     ".": {
@@ -17,6 +17,8 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "typescript": "6.0.3"
+    "@types/node": "^24.19.2",
+    "typescript": "6.0.3",
+    "yaml": "^2.9.1"
   }
 }
