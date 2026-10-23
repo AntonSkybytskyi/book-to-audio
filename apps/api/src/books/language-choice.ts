@@ -1,8 +1,7 @@
 import { detectLanguage } from "./language-detect.js";
 import { declaredLanguage, type Language } from "./languages.js";
-
-/** Where a book's language came from. `chosen` is set when the owner picks one. */
-export type LanguageSource = "detected" | "metadata" | "unknown" | "chosen";
+import type { LanguageSource } from "@book-to-audio/contracts";
+export type { LanguageSource } from "@book-to-audio/contracts";
 
 export interface LanguageChoice {
   language: Language;

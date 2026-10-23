@@ -1,10 +1,6 @@
 import type Database from "better-sqlite3";
-import type { ThroughputPoint } from "@book-to-audio/contracts";
-
-export interface MachineInfo {
-  cpuCount: number;
-  cpuModel: string;
-}
+import type { MachineInfo, ThroughputPoint } from "@book-to-audio/contracts";
+export type { MachineInfo } from "@book-to-audio/contracts";
 
 /** What one benchmark measured for one voice. */
 export interface VoiceMeasurement {

@@ -1,6 +1,7 @@
 import type { BookStatus } from "../books/repository.js";
+import { NO_OUTPUTS, type OutputState, type OutputsView } from "@book-to-audio/contracts";
 
-export type OutputState = "queued" | "building" | "ready" | "failed";
+export { NO_OUTPUTS, type OutputState, type OutputsView };
 
 /** The `book_outputs` row of a book. */
 export interface OutputRow {
@@ -13,32 +14,6 @@ export interface OutputRow {
   m4bBytes: number | null;
   zipBytes: number | null;
 }
-
-/** What the API and the live events say about a book's downloads. */
-export interface OutputsView {
-  /** `none` until a build was ever wanted. */
-  state: "none" | OutputState;
-  /** The files can be downloaded now: built from the book's current audio, and the book is done. A rebuild of the same audio does not change that. */
-  available: boolean;
-  /** Files built from older audio exist and new ones are on their way (or waiting for the book to be done again). */
-  updating: boolean;
-  /** 0 to 1, while building. */
-  progress: number;
-  error: string | null;
-  /** Only while `available`. */
-  m4bBytes: number | null;
-  zipBytes: number | null;
-}
-
-export const NO_OUTPUTS: OutputsView = {
-  state: "none",
-  available: false,
-  updating: false,
-  progress: 0,
-  error: null,
-  m4bBytes: null,
-  zipBytes: null,
-};
 
 /**
  * The generation protocol in one place: the files are current only when a build recorded the

@@ -2,7 +2,9 @@ import {
   audioSecondsFor,
   conversionSeconds,
   suggestedWorkers,
-  type ThroughputPoint,
+  type BenchmarkRowView,
+  type BenchmarkView,
+  type ResultView,
 } from "@book-to-audio/contracts";
 import { LANGUAGES } from "../books/languages.js";
 import { benchmarkModel } from "../speed/calibration.js";
@@ -16,50 +18,13 @@ import {
   type StoredBenchmark,
 } from "./repository.js";
 import type { BenchmarkStatus } from "./status.js";
+export type { BenchmarkView } from "@book-to-audio/contracts";
 
 /** The yardstick of the Speed table: a novel of 90,000 words (about 10 hours of audio) in 30 chapters. */
 const NOVEL_WORDS = 90_000;
 const NOVEL_CHAPTERS = 30;
 /** Characters of prepared text per word, spaces and punctuation included. */
 const CHARS_PER_WORD: Readonly<Record<string, number>> = { en: 5.8, uk: 7.3, ru: 7.1 };
-
-export interface ResultView {
-  secondsPerKChar: number;
-  rtf: number;
-  encodeFactor: number | null;
-  modelLoadSeconds: number;
-  throughput: ThroughputPoint[];
-  sampleChars: number;
-  sampleAudioSeconds: number;
-  measuredAt: string;
-  /** Audio of the yardstick novel in this voice, and the time to convert it with the current workers. */
-  novelAudioSeconds: number;
-  novelConvertSeconds: number;
-  /** Measured on another machine or with older text rules than the ones in use. */
-  outdated: boolean;
-  /** The load average when the run began and ended; the second includes the run itself. */
-  loadStart: number | null;
-  loadEnd: number | null;
-  /** The computer was busier than it has cores when the run began, so the speed is probably understated. */
-  busy: boolean;
-}
-
-export interface BenchmarkRowView {
-  language: string;
-  voiceId: string;
-  result: ResultView | null;
-}
-
-export interface BenchmarkView extends BenchmarkStatus {
-  rows: BenchmarkRowView[];
-  workers: number;
-  maxWorkers: number;
-  /** The fewest workers that get close to the best throughput measured; a hint only. */
-  suggestedWorkers: number | null;
-  machine: MachineInfo;
-  /** A voice has no result, or one that is outdated: a run is due. */
-  needsRun: boolean;
-}
 
 export interface BenchmarkViewDeps {
   engine: TtsEngine;

@@ -4,25 +4,14 @@ import type { SettingsStore } from "../settings/settings.js";
 import type { TtsEngine } from "../tts/engine.js";
 import type { ChapterConverter } from "./convert-chapter.js";
 import type { Release } from "./pool-gate.js";
-import type { PauseCause, PoolStateName, PoolStateStore } from "./pool-state.js";
+import type { PoolStatus } from "@book-to-audio/contracts";
+import type { PoolStateStore } from "./pool-state.js";
+export type { PoolStatus } from "@book-to-audio/contracts";
 
 export interface PoolLogger {
   info(message: string): void;
   warn(context: object, message: string): void;
   error(context: object, message: string): void;
-}
-
-export interface PoolStatus {
-  state: PoolStateName;
-  /** Why the pool paused. */
-  error: string | null;
-  cause: PauseCause | null;
-  /** Workers wanted by the settings. */
-  workers: number;
-  /** Workers converting a chapter right now. */
-  activeWorkers: number;
-  /** The speed benchmark has the pool: running chapters finish, none starts until it is done. */
-  held: boolean;
 }
 
 /** One finished chapter, as the speed estimates learn from it. */

@@ -1,7 +1,8 @@
+import { LANGUAGES } from "@book-to-audio/contracts";
 import type { Language, LanguageSource } from "./api";
 import { languageName } from "./language-names";
 
-export const ALL_LANGUAGES: Language[] = ["en", "uk", "ru"];
+export const ALL_LANGUAGES: Language[] = [...LANGUAGES];
 
 export interface PickerOption {
   code: Language;

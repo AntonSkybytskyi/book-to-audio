@@ -1,11 +1,11 @@
 import type { FastifyInstance } from "fastify";
-import { audioSecondsFor, type SpeedModel } from "@book-to-audio/contracts";
+import { audioSecondsFor, type LanguageEstimateView } from "@book-to-audio/contracts";
 import { LANGUAGES, type Language } from "../books/languages.js";
 import { countPrepared } from "../books/prepared-chars.js";
 import type { CountRepository } from "../books/count-repository.js";
 import type { BookRepository } from "../books/repository.js";
 import type { TextPreparer } from "../convert/chapter-text.js";
-import type { BookEstimateView, Estimator } from "../speed/estimator.js";
+import type { Estimator } from "../speed/estimator.js";
 import { TEXT_PROCESSING_VERSION } from "../text/index.js";
 import type { TtsEngine } from "../tts/engine.js";
 import { sameOriginOnly } from "../security.js";
@@ -18,15 +18,6 @@ export interface EstimateRouteDeps {
   estimator: Estimator;
   /** The text rules, held to the same few worker threads as the background counting. */
   prepareText: TextPreparer;
-}
-
-export interface LanguageEstimate {
-  estimate: BookEstimateView | null;
-  speed: SpeedModel | null;
-  /** Seconds of audio expected for each chapter, in reading order. */
-  chapterSeconds: number[];
-  /** The book's own text has not been counted yet: ask again when the page is told it has. */
-  measuring: boolean;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -111,7 +102,7 @@ export function registerEstimateRoute(api: FastifyInstance, deps: EstimateRouteD
         chars = await counting;
       }
       const found = estimator.forBooks(repo.workload(), { bookId: id, language, chars }).get(id);
-      const body: LanguageEstimate = {
+      const body: LanguageEstimateView = {
         estimate: found?.estimate ?? null,
         speed: found?.speed ?? null,
         chapterSeconds: found ? chars.map((count) => audioSecondsFor(found.speed, count)) : [],

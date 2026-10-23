@@ -1,9 +1,8 @@
 import type Database from "better-sqlite3";
 import type { OutputRow, OutputState } from "../outputs/view.js";
 import type { LanguageSource } from "./language-choice.js";
-
-export type BookStatus = "ready" | "converting" | "paused" | "done" | "done_with_errors";
-export type ChapterStatus = "pending" | "queued" | "generating" | "done" | "failed";
+import type { BookStatus, ChapterStatus } from "@book-to-audio/contracts";
+export type { BookStatus, ChapterStatus } from "@book-to-audio/contracts";
 
 export interface Book {
   id: string;

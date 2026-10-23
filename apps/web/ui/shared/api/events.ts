@@ -1,5 +1,6 @@
 "use client";
 
+import { EVENT_TYPES } from "@book-to-audio/contracts";
 import { useEffect, useRef, useSyncExternalStore } from "react";
 
 /** A message from the server. Each entity narrows it to the events it owns. */
@@ -13,17 +14,6 @@ export type LiveStatus = "connecting" | "live" | "down";
 /** Called with every event and its sequence number (higher means newer). */
 export type EventListener = (event: StreamEvent, seq: number) => void;
 
-// Names of the server's event types; each entity declares the payloads it owns.
-const EVENT_TYPES = [
-  "chapter",
-  "book",
-  "pool",
-  "book-added",
-  "book-deleted",
-  "outputs",
-  "benchmark",
-  "book-counted",
-] as const;
 const RECONNECT_MS = 3000;
 
 // One EventSource for the whole page, shared by everything that listens.

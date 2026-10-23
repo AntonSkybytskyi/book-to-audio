@@ -1,15 +1,6 @@
 import type Database from "better-sqlite3";
 import { isLanguage, LANGUAGES, type Language } from "../books/languages.js";
-
-export interface SettingsView {
-  workers: number;
-  /** Most workers the settings accept. */
-  maxWorkers: number;
-  /** Used until the owner picks a number. */
-  defaultWorkers: number;
-  /** The languages the language picker offers, in the order of `LANGUAGES`. */
-  shownLanguages: Language[];
-}
+import type { SettingsView } from "@book-to-audio/contracts";
 
 /** English and Ukrainian are shown until the owner changes it; Russian is supported but hidden. */
 export const DEFAULT_SHOWN_LANGUAGES: readonly Language[] = ["en", "uk"];

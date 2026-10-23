@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
+import type { BookListView } from "@book-to-audio/contracts";
 import { LANGUAGES, type Language } from "../books/languages.js";
 import type { BookRepository } from "../books/repository.js";
 import type { Storage } from "../books/storage.js";
@@ -43,7 +44,7 @@ export function registerBookRoutes(api: FastifyInstance, deps: BookRouteDeps) {
     return book ?? null;
   };
 
-  api.get("/books", async () => ({ books: loadSummaries(repo, estimator) }));
+  api.get("/books", async (): Promise<BookListView> => ({ books: loadSummaries(repo, estimator) }));
 
   api.get<{ Params: { id: string } }>("/books/:id", async (req, reply) => {
     const book = withBook(req.params.id, reply);

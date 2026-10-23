@@ -2,50 +2,15 @@ import {
   audioSecondsFor,
   conversionSeconds,
   remainingAudio,
+  type BookEstimateView,
+  type QueueView,
   type SpeedModel,
-  type SpeedSource,
+  type TimeLeftView,
 } from "@book-to-audio/contracts";
 import type { BookLoad } from "../books/repository.js";
 import { pickVoice, type TtsEngine } from "../tts/engine.js";
 import type { SpeedCalibration } from "./calibration.js";
-
-/** Who is in front of a book in the queue, and how long until its turn. */
-export interface QueueView {
-  booksAhead: number;
-  /** Null when nothing is ahead, or the pool is paused and no one can say. */
-  startsInSeconds: number | null;
-}
-
-export interface BookEstimateView {
-  /** The whole book read aloud. */
-  audioSeconds: number;
-  /** Converting it from the start with the workers in use. */
-  convertSeconds: number;
-  source: SpeedSource;
-  workers: number;
-  /** Where it would stand if it were queued now (for a book that is not queued yet). */
-  queue: QueueView;
-}
-
-/**
- * `waiting`: other books go first. `waiting_for_speed_test`: the pool is held for the speed test, so
- * nothing starts until it is over. `paused`: this book is paused. `pool_paused`: all conversion is.
- */
-export type TimeLeftState =
-  | "running"
-  | "waiting"
-  | "waiting_for_speed_test"
-  | "paused"
-  | "pool_paused";
-
-export interface TimeLeftView extends QueueView {
-  state: TimeLeftState;
-  /** Until this book is done, once it starts; null while paused. Failed chapters are not counted. */
-  remainingSeconds: number | null;
-  /** While `waiting_for_speed_test`: how long the speed test is expected to take yet. */
-  speedTestSeconds: number | null;
-  source: SpeedSource;
-}
+export type { BookEstimateView } from "@book-to-audio/contracts";
 
 export interface BookEstimates {
   estimate: BookEstimateView;

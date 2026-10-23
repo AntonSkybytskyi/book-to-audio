@@ -1,8 +1,5 @@
 import type Database from "better-sqlite3";
-
-export type PoolStateName = "running" | "paused";
-/** `failures`: chapters kept failing. `disk`: the disk is nearly full. */
-export type PauseCause = "failures" | "disk";
+import type { PoolStateName, PauseCause } from "@book-to-audio/contracts";
 
 export interface PoolState {
   state: PoolStateName;

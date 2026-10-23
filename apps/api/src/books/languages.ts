@@ -1,5 +1,6 @@
-export const LANGUAGES = ["en", "uk", "ru"] as const;
-export type Language = (typeof LANGUAGES)[number];
+import { LANGUAGES, type Language } from "@book-to-audio/contracts";
+
+export { LANGUAGES, type Language };
 
 export const LANGUAGE_NAMES: Record<Language, string> = {
   en: "English",
