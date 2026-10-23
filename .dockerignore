@@ -4,10 +4,11 @@
 .claude
 .pnpm-store
 gan-harness
-data
-coverage
-.env
-.env.*
+# Patterns with **/ also match inside apps/ and packages/, not only at the root.
+**/data
+**/coverage
+**/.env
+**/.env.*
 **/node_modules
 **/dist
 **/.next
