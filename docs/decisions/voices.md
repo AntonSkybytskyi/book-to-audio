@@ -1,8 +1,8 @@
 # Decision: default Piper voices
 
-Status: accepted (ANO-14, slice 5) · Decision: **`en_US-lessac-medium`**, **`uk_UA-ukrainian_tts-medium`** (speaker `lada`) and **`ru_RU-ruslan-medium`**, all from `rhasspy/piper-voices` at revision `5041a7a49ae5b3a0f30e6837769eb03fdbb231bd`, checked with sha256 in the Dockerfile.
+Status: accepted (ANO-14, slice 5) · Decision: **`en_US-lessac-medium`**, **`uk_UA-ukrainian_tts-medium`** (speaker `lada`) and **`ru_RU-ruslan-medium`**, all from `rhasspy/piper-voices` at revision `5041a7a49ae5b3a0f30e6837769eb03fdbb231bd`, checked with sha256 in the piper-api Dockerfile.
 
-The spec (sections 6 and 7) wants one default voice per language, no picker (section 13). The list lives in `apps/api/src/tts/voices.ts`; `PiperEngine.voices()` puts these first, so a language's voice is the first one listed for it even if more models are in the voices folder.
+The spec (sections 6 and 7) wants one default voice per language. The list lives in `apps/piper-api/src/voices.ts`; `PiperEngine.voices()` and so piper-api's `GET /voices` put these first, so a language's default voice is the first one listed for it even if more models are in the voices folder. Since ANO-16 the Settings page can pick another voice per language, from any TTS service, and the app's voice ids carry the service's name (`piper:uk_UA-ukrainian_tts-medium:lada`).
 
 ## What was compared
 
@@ -19,7 +19,7 @@ All run inside the app image with the real Piper binary, on the same text (two o
 | `ru_RU-irina-medium` | 63 MB | 10.7 s | |
 | `ru_RU-denis-medium` | 63 MB | 10.0 s | |
 
-Piper normalises each file to full scale, so loudness and clipping do not tell the voices apart, and no voice produced a gap, a cut-off or an empty file on these texts. **Nobody listened to them while this was written**; the choice rests on what the model cards say and on pace. If the owner prefers another voice, it is a one-line change in `voices.ts`.
+Piper normalises each file to full scale, so loudness and clipping do not tell the voices apart, and no voice produced a gap, a cut-off or an empty file on these texts. **Nobody listened to them while this was written**; the choice rests on what the model cards say and on pace. If the owner prefers another voice, it is a one-line change in `voices.ts` (or a pick on the Settings page, for a voice that is installed).
 
 - **Ukrainian: `ukrainian_tts-medium`.** It is the only medium Ukrainian model in the repository, and the one the spec names. Its three speakers come from the open `ukrainian-tts` data set (Lada, Tetiana, Mykyta). **Lada** is a female voice and reads at the fastest, evenest pace of the three, which keeps a book's length down. Tetiana is the alternative.
 - **Russian: `ruslan-medium`.** As far as its model card says, it is trained on the RUSLAN corpus, a single studio speaker recorded for speech synthesis. It also reads fastest of the three medium voices tried. Irina is the alternative.
@@ -40,4 +40,4 @@ Its config says `"phoneme_type": "text"`: it is **character based**, not phoneme
 
 ## Size
 
-The image grows by about 140 MB (the two new models). The image still builds (checked; today that is `docker compose build core`), and the voices stage fetches each file at the pinned revision and verifies its sha256.
+The image grows by about 140 MB (the two new models). The image still builds (since ANO-16 the voices are in the piper-api image: `docker compose build piper-api`), and the voices stage fetches each file at the pinned revision and verifies its sha256.
