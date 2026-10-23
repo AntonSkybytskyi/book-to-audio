@@ -2,7 +2,7 @@
 
 Status: accepted (ANO-14, slice 5) · Decision: **`en_US-lessac-medium`**, **`uk_UA-ukrainian_tts-medium`** (speaker `lada`) and **`ru_RU-ruslan-medium`**, all from `rhasspy/piper-voices` at revision `5041a7a49ae5b3a0f30e6837769eb03fdbb231bd`, checked with sha256 in the Dockerfile.
 
-The spec (sections 6 and 7) wants one default voice per language, no picker (section 13). The list lives in `src/server/tts/voices.ts`; `PiperEngine.voices()` puts these first, so a language's voice is the first one listed for it even if more models are in the voices folder.
+The spec (sections 6 and 7) wants one default voice per language, no picker (section 13). The list lives in `apps/api/src/tts/voices.ts`; `PiperEngine.voices()` puts these first, so a language's voice is the first one listed for it even if more models are in the voices folder.
 
 ## What was compared
 

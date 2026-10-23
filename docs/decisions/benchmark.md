@@ -1,6 +1,6 @@
 # Decision: speed benchmark and time estimates
 
-Status: proposed, the speed target needs the owner's confirmation (ANO-11, slice 6) · Code: `src/server/benchmark/` (measurement, runner, CLI), `src/server/speed/` (the model of each voice, learning, the estimator), `src/shared/estimate.ts` (the arithmetic, used by the server and the pages), migration 8.
+Status: proposed, the speed target needs the owner's confirmation (ANO-11, slice 6) · Code: `apps/api/src/benchmark/` (measurement, runner, CLI), `apps/api/src/speed/` (the model of each voice, learning, the estimator), `packages/contracts/src/estimate.ts` (the arithmetic, used by the server and the pages), migration 8.
 
 The spec (section 11) says there is no fixed speed target yet: M1 measures the engine's real-time factor on the owner's machine, shows an estimated time before each conversion, and the target is set from those numbers. This record is the method, the numbers measured here, and a proposed target.
 

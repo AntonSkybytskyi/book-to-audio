@@ -45,14 +45,20 @@ jobs:
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm build
 
-  # Checks that the image still builds. It is not pushed anywhere.
+  # Checks that every image still builds. They are not pushed anywhere.
   docker:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [api, web, edge]
+    name: docker (${{ matrix.app }})
     steps:
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
+          file: apps/${{ matrix.app }}/Dockerfile
           push: false
-          # Keeps the Piper and voice layers between runs.
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Keeps the layers between runs, each image in its own cache (Piper and the voices for api).
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}

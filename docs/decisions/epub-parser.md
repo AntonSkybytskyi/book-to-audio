@@ -20,7 +20,7 @@ Neither library covers what the slice needs: EPUB 3 nav, splitting at anchors, a
 
 ## What the in-house parser is
 
-`src/server/epub/`, about 1,000 lines with no native code:
+`apps/api/src/epub/`, about 1,000 lines with no native code:
 
 - `jszip` opens the archive. The central directory is walked before JSZip loads it, to cap the entry count (JSZip builds an object per entry). Declared sizes are checked up front, and every read is metered while inflating, with a cap per document as well as for the whole book, because declared sizes can lie. Entry names are only map keys, never file paths.
 - The parse tree is counted while it is built (500,000 nodes per document, 5,000,000 per book), so a few kilobytes of repeated `<i/>` cannot become gigabytes of objects.
