@@ -4,6 +4,6 @@
   "private": true,
   "description": "nginx in front of web and core: the only published port",
   "scripts": {
-    "dev": "docker compose -f ../../docker-compose.dev.yml up --build"
+    "dev": "docker compose -f ../../docker-compose.dev.yml up --build --abort-on-container-exit --exit-code-from nginx"
   }
 }
