@@ -12,6 +12,7 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "allowJs": false,
+    "paths": { "@/*": ["./src/*"] },
     "noEmit": true,
     "incremental": true,
     "plugins": [

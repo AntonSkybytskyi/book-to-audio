@@ -1,6 +1,6 @@
-import { BookList } from "./_components/BookList";
-import { Page } from "./_components/Page";
-import { UploadZone } from "./_components/UploadZone";
+import { BookList } from "@/ui/features/library/BookList";
+import { Page } from "@/ui/shared/ui/Page";
+import { UploadZone } from "@/ui/features/library/UploadZone";
 
 export default function HomePage() {
   return (

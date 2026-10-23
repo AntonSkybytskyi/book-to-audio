@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { PoolBanner } from "./_components/PoolBanner";
-import { SiteHeader } from "./_components/SiteHeader";
+import { PoolBanner } from "@/ui/features/pool/PoolBanner";
+import { SiteHeader } from "./SiteHeader";
 // oxlint-disable-next-line import/no-unassigned-import -- global stylesheet
 import "./globals.css";
 
