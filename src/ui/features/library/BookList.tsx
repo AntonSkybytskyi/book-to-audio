@@ -9,10 +9,10 @@ import { languageName } from "@/ui/entities/language/language-names";
 import { BookCover } from "@/ui/entities/book/BookCover";
 import { Button } from "@/ui/shared/ui/Button";
 import { DeleteBookDialog } from "@/ui/entities/book/DeleteBookDialog";
-import { useLiveEvents, useLiveStatus } from "@/ui/shared/api/events";
+import { useLiveEvents } from "@/ui/shared/api/events";
 import { isLiveEvent, patchLibrary } from "@/ui/entities/book/live-patch";
-import { usePoll } from "@/ui/shared/api/use-poll";
-import { usePool } from "@/ui/entities/pool/pool-store";
+import { useLiveQuery } from "@/ui/shared/api/use-live-query";
+import { usePool } from "@/ui/entities/pool/use-pool";
 import { Notice } from "@/ui/shared/ui/Notice";
 import { ProgressBar } from "@/ui/shared/ui/ProgressBar";
 
@@ -27,18 +27,17 @@ export function BookList() {
 }
 
 function Shelf({ onRetry }: { onRetry: () => void }) {
-  const live = useLiveStatus() === "live";
   const {
     data: books,
     error,
     stale,
     patch,
     update,
-  } = usePoll({
+  } = useLiveQuery({
+    key: ["library"],
     load: getBooks,
     keepPolling: libraryIsBusy,
     intervalMs: POLL_MS,
-    live,
   });
   useLiveEvents(
     useCallback(

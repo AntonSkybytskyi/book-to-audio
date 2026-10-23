@@ -12,8 +12,8 @@ import { type Language } from "@/ui/entities/language/api";
 import { languageName } from "@/ui/entities/language/language-names";
 import { pluralize } from "@/ui/shared/lib/format";
 import { ALL_LANGUAGES, languageSettingsMessage } from "@/ui/entities/language/language-picker";
-import { usePool } from "@/ui/entities/pool/pool-store";
-import { usePoll } from "@/ui/shared/api/use-poll";
+import { usePool } from "@/ui/entities/pool/use-pool";
+import { useLiveQuery } from "@/ui/shared/api/use-live-query";
 import { LoadState } from "@/ui/shared/ui/LoadState";
 import { Page } from "@/ui/shared/ui/Page";
 import { SettingsSection } from "./SettingsSection";
@@ -33,7 +33,7 @@ export function SettingsView() {
     data: settings,
     error,
     setData,
-  } = usePoll<Settings>({ load, keepPolling: never, intervalMs: 5000 });
+  } = useLiveQuery<Settings>({ key: ["settings"], load, keepPolling: never, intervalMs: 5000 });
   const pool = usePool();
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);

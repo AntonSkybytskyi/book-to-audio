@@ -10,7 +10,7 @@ import {
 } from "@/ui/entities/book/chapter";
 import { cx } from "@/ui/shared/lib/cx";
 import { formatClock } from "@/ui/shared/lib/format";
-import { useAction } from "@/ui/shared/lib/use-action";
+import { useGuardedMutation } from "@/ui/shared/api/use-guarded-mutation";
 import { Button } from "@/ui/shared/ui/Button";
 import { ProgressBar } from "@/ui/shared/ui/ProgressBar";
 
@@ -72,7 +72,7 @@ export function ChapterRow({
   onRegenerate,
   onConfirmRegenerate,
 }: Props) {
-  const regenerate = useAction();
+  const regenerate = useGuardedMutation();
   const playable = canPlay(chapter);
   const label = `${playing ? "Pause" : "Play"} chapter ${chapter.position}, ${chapter.title}`;
 

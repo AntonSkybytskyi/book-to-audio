@@ -1,7 +1,7 @@
 "use client";
 
 import type { Chapter } from "@/ui/entities/book/api";
-import { useAction } from "@/ui/shared/lib/use-action";
+import { useGuardedMutation } from "@/ui/shared/api/use-guarded-mutation";
 import { ConfirmDialog } from "@/ui/shared/ui/ConfirmDialog";
 
 interface Props {
@@ -13,7 +13,7 @@ interface Props {
 
 /** One dialog for the whole chapter list: starting a running chapter again throws its progress away. */
 export function RegenerateChapterDialog({ chapter, onRegenerate, onClose }: Props) {
-  const action = useAction();
+  const action = useGuardedMutation();
   const { clearError } = action;
 
   const close = () => {

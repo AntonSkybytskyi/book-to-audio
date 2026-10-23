@@ -3,9 +3,9 @@
 import { useCallback, useState } from "react";
 import { getBook, type Book } from "./api";
 import { bookIsBusy } from "./book-status";
-import { useLiveEvents, useLiveStatus } from "@/ui/shared/api/events";
+import { useLiveEvents } from "@/ui/shared/api/events";
 import { isLiveEvent, patchBook } from "./live-patch";
-import { usePoll, type Poll } from "@/ui/shared/api/use-poll";
+import { useLiveQuery, type Poll } from "@/ui/shared/api/use-live-query";
 
 const POLL_MS = 2000;
 
@@ -16,8 +16,12 @@ const POLL_MS = 2000;
  */
 export function useBook(id: string): Poll<Book> & { deleted: boolean } {
   const load = useCallback(() => getBook(id), [id]);
-  const live = useLiveStatus() === "live";
-  const poll = usePoll({ load, keepPolling: bookIsBusy, intervalMs: POLL_MS, live });
+  const poll = useLiveQuery({
+    key: ["book", id],
+    load,
+    keepPolling: bookIsBusy,
+    intervalMs: POLL_MS,
+  });
   const [deletedByEvent, setDeletedByEvent] = useState(false);
   const { patch } = poll;
   useLiveEvents(

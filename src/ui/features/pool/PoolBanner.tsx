@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { resumePool } from "@/ui/entities/pool/api";
 import { cx } from "@/ui/shared/lib/cx";
-import { applyPoolSnapshot, usePool } from "@/ui/entities/pool/pool-store";
+import { useApplyPoolSnapshot, usePool } from "@/ui/entities/pool/use-pool";
 import { Button } from "@/ui/shared/ui/Button";
 
 const BANNER = "border-b border-l-[0.35rem] border-rule bg-paper-raised";
@@ -14,6 +14,7 @@ const TEXT = "grid min-w-0 gap-[0.35rem] text-[0.95rem]";
 /** Shown on every page while the pool is paused because chapters kept failing. */
 export function PoolBanner() {
   const pool = usePool();
+  const applyPoolSnapshot = useApplyPoolSnapshot();
   const [resuming, setResuming] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
 

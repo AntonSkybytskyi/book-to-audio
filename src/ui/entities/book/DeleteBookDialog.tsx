@@ -1,7 +1,7 @@
 "use client";
 
 import { deleteBook } from "./api";
-import { useAction } from "@/ui/shared/lib/use-action";
+import { useGuardedMutation } from "@/ui/shared/api/use-guarded-mutation";
 import { ConfirmDialog } from "@/ui/shared/ui/ConfirmDialog";
 
 interface Props {
@@ -13,7 +13,7 @@ interface Props {
 
 /** Asks before deleting a book, naming it, and says what is lost. Shared by the library and the book page. */
 export function DeleteBookDialog({ book, onClose, onDeleted }: Props) {
-  const action = useAction();
+  const action = useGuardedMutation();
   const { clearError } = action;
 
   const close = () => {

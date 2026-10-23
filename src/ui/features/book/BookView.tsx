@@ -7,7 +7,7 @@ import { bookSummary, overallProgress } from "@/ui/entities/book/book-status";
 import { speedTestSecondsLeft } from "@/ui/entities/benchmark/benchmark";
 import { bookTimeLeft } from "@/ui/entities/book/time-left";
 import { useBenchmark } from "@/ui/entities/benchmark/use-benchmark";
-import { usePool } from "@/ui/entities/pool/pool-store";
+import { usePool } from "@/ui/entities/pool/use-pool";
 import { useBook } from "@/ui/entities/book/use-book";
 import { BookControls } from "./BookControls";
 import { BookDeleted } from "@/ui/entities/book/BookDeleted";

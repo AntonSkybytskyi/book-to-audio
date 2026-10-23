@@ -6,7 +6,7 @@ import { cx } from "@/ui/shared/lib/cx";
 import { downloadsState } from "./downloads-state";
 import { formatLeft, secondsLeft, type ProgressSample } from "./eta";
 import { formatBytes } from "@/ui/shared/lib/format";
-import { useAction } from "@/ui/shared/lib/use-action";
+import { useGuardedMutation } from "@/ui/shared/api/use-guarded-mutation";
 import { Button } from "@/ui/shared/ui/Button";
 import { ProgressBar } from "@/ui/shared/ui/ProgressBar";
 
@@ -60,7 +60,7 @@ async function startDownload(url: string): Promise<"started" | "changed" | "unre
 
 /** The M4B and ZIP of a finished book: what state they are in, and the links once they are current. */
 export function Downloads({ book, onChanged }: Props) {
-  const retry = useAction();
+  const retry = useGuardedMutation();
   const [notice, setNotice] = useState<string | null>(null);
   const state = downloadsState(book);
   const building =

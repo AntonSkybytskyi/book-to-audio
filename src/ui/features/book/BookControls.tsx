@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { pauseBook, regenerateBook, resumeBook, type Book } from "@/ui/entities/book/api";
 import { pluralize } from "@/ui/shared/lib/format";
-import { useAction } from "@/ui/shared/lib/use-action";
+import { useGuardedMutation } from "@/ui/shared/api/use-guarded-mutation";
 import { Button } from "@/ui/shared/ui/Button";
 import { ConfirmDialog } from "@/ui/shared/ui/ConfirmDialog";
 
@@ -16,8 +16,8 @@ interface Props {
 
 /** Pause or resume, regenerate and delete for a book that has been queued. */
 export function BookControls({ book, onChanged, onDelete }: Props) {
-  const toggle = useAction();
-  const regenerate = useAction();
+  const toggle = useGuardedMutation();
+  const regenerate = useGuardedMutation();
   const [confirming, setConfirming] = useState(false);
 
   if (book.status === "ready") return null;
