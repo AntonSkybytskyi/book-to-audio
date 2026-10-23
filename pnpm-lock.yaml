@@ -4,16 +4,39 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+packageExtensionsChecksum: sha256-3wY3YdYGzoL0IQhwwyFhJ1VaadlYhNf8XVMUSUch8LA=
+
 importers:
 
   .:
+    devDependencies:
+      '@types/node':
+        specifier: ^24.19.2
+        version: 24.19.2
+      oxfmt:
+        specifier: ^0.74.0
+        version: 0.74.0
+      oxlint:
+        specifier: ^1.89.0
+        version: 1.89.0
+      tsx:
+        specifier: ^4.23.15
+        version: 4.23.15
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^5.0.5
+        version: 5.0.5(@types/node@24.19.2)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
+
+  apps/api:
     dependencies:
+      '@book-to-audio/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@fastify/multipart':
         specifier: 10.1.4
-        version: 10.1.4
-      '@tanstack/react-query':
-        specifier: 5.104.1
-        version: 5.104.1(react@19.3.1)
+        version: 10.1.4(fastify@5.12.7)
       better-sqlite3:
         specifier: 13.0.3
         version: 13.0.3
@@ -26,6 +49,28 @@ importers:
       jszip:
         specifier: 3.10.2
         version: 3.10.2
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^9.6.0
+        version: 9.6.0
+      '@types/node':
+        specifier: ^24.19.2
+        version: 24.19.2
+      tsx:
+        specifier: ^4.23.15
+        version: 4.23.15
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+
+  apps/web:
+    dependencies:
+      '@book-to-audio/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@tanstack/react-query':
+        specifier: 5.104.1
+        version: 5.104.1(react@19.3.1)
       next:
         specifier: 16.4.2
         version: 16.4.2(@types/node@24.19.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -39,9 +84,6 @@ importers:
       '@tailwindcss/postcss':
         specifier: ^4.3.3
         version: 4.3.3
-      '@types/better-sqlite3':
-        specifier: ^9.6.0
-        version: 9.6.0
       '@types/node':
         specifier: ^24.19.2
         version: 24.19.2
@@ -51,24 +93,18 @@ importers:
       '@types/react-dom':
         specifier: ^19.3.0
         version: 19.3.0(@types/react@19.3.0)
-      oxfmt:
-        specifier: ^0.74.0
-        version: 0.74.0
-      oxlint:
-        specifier: ^1.89.0
-        version: 1.89.0
       tailwindcss:
         specifier: ^4.3.3
         version: 4.3.3
-      tsx:
-        specifier: ^4.23.15
-        version: 4.23.15
       typescript:
         specifier: 6.0.3
         version: 6.0.3
-      vitest:
-        specifier: ^5.0.5
-        version: 5.0.5(@types/node@24.19.2)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
+
+  packages/contracts:
+    devDependencies:
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
 
 packages:
 
@@ -258,6 +294,8 @@ packages:
 
   '@fastify/multipart@10.1.4':
     resolution: {integrity: sha512-J510g4fSp3bXh0DEezcPyMXkQzhn2K3blpSESaOGhqQfzNHR4vhiBBHkdisSM2FU4ltTK/jqObUWs0WmHYNYYg==}
+    peerDependencies:
+      fastify: '5'
 
   '@fastify/proxy-addr@5.1.2':
     resolution: {integrity: sha512-uqB4QsgVoro0XDC+DIftIMGXHdBPn+lK6Ek3xXAIxPMCJfqxnbtyEoMCm2KPUVOuIosd7Cyw9HawEqMFM/UA+g==}
@@ -1777,11 +1815,12 @@ snapshots:
     dependencies:
       dequal: 2.0.3
 
-  '@fastify/multipart@10.1.4':
+  '@fastify/multipart@10.1.4(fastify@5.12.7)':
     dependencies:
       '@fastify/busboy': 3.2.3
       '@fastify/deepmerge': 3.2.2
       '@fastify/error': 4.2.1
+      fastify: 5.12.7
       fastify-plugin: 6.0.1
       secure-json-parse: 4.1.1
 

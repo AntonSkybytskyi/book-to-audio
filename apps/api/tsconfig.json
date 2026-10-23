@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
+    // Type-checks against the contracts' source, so no build is needed first.
+    "customConditions": ["source"]
+  },
+  "include": ["src/**/*.ts", "scripts/**/*.ts", "*.config.ts"]
+}
