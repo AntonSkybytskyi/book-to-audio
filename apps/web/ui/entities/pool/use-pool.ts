@@ -35,6 +35,7 @@ export function usePool(): PoolStatus | null {
             workers: event.workers,
             activeWorkers: event.activeWorkers,
             held: event.held,
+            services: event.services,
           }),
           seq,
         );

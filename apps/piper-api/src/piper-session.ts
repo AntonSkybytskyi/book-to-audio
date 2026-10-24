@@ -1,7 +1,8 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { TtsError, type PcmAudio, type TtsSession } from "./engine.js";
+import { TtsError } from "./errors.js";
+import type { PcmAudio } from "./wav.js";
 
 export interface PiperSessionOptions {
   bin: string;
@@ -31,9 +32,10 @@ const CLOSE_GRACE_MS = 1500;
  * One long-lived Piper process for one voice. Chunks go in as JSON lines on
  * stdin (`--json-input`); Piper writes each one to a WAV file and prints the
  * file's path on stdout when it is complete. The model loads once, at the
- * first chunk, instead of for every chunk.
+ * first chunk, instead of for every chunk. One chunk at a time; a session that throws
+ * is broken: close it and open a new one.
  */
-export class PiperSession implements TtsSession {
+export class PiperSession {
   private exit: { code: number | null; signal: NodeJS.Signals | null } | null = null;
   private readonly exited: Promise<void>;
   private pending: Pending | null = null;
@@ -89,7 +91,7 @@ export class PiperSession implements TtsSession {
           detail: `"${options.bin}" was not found`,
         });
       }
-      throw new TtsError("synthesis_failed", "The speech engine could not be started.", {
+      throw new TtsError("engine_unavailable", "The speech engine could not be started.", {
         cause: error,
         detail: (error as Error).message,
       });

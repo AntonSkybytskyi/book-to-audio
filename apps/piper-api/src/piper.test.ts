@@ -1,8 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import { beforeEach, describe, expect, it } from "vitest";
-import { alive, usePiperFixture, VOICE } from "../testing/fake-piper.js";
-import { until } from "../testing/pool-harness.js";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { alive, usePiperFixture, VOICE } from "./testing/piper-fixture.js";
 import { PiperEngine } from "./piper.js";
 import { wavToPcm } from "./piper-session.js";
 
@@ -27,10 +26,39 @@ describe("PiperEngine", () => {
     ]);
   });
 
-  it("has no voices when the directory is missing", () => {
-    const engine = new PiperEngine({ bin: "piper", voicesDir: path.join(voicesDir, "nope") });
+  it("has no voices when the directory is missing, and says why", () => {
+    const warn = vi.fn<(message: string) => void>();
+    const missing = path.join(voicesDir, "nope");
+    const engine = new PiperEngine({ bin: "piper", voicesDir: missing, logger: { warn } });
 
     expect(engine.voices()).toEqual([]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining(`cannot read ${missing}: ENOENT`));
+  });
+
+  it("says why a voice cannot be used, again only when that changes", () => {
+    let now = 0;
+    const warn = vi.fn<(message: string) => void>();
+    const engine = new PiperEngine({
+      bin: "piper",
+      voicesDir,
+      scanTtlMs: 10,
+      now: () => now,
+      logger: { warn },
+    });
+
+    engine.voices();
+    now = 20;
+    engine.voices();
+    fs.writeFileSync(path.join(voicesDir, "mute.onnx"), "model");
+    fs.writeFileSync(path.join(voicesDir, "mute.onnx.json"), JSON.stringify({ language: {} }));
+    now = 40;
+    engine.voices();
+
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(warn.mock.calls[0]?.[0]).toMatch(
+      /^Piper voices that cannot be used: broken\.onnx: no readable config: ENOENT/,
+    );
+    expect(warn.mock.calls[1]?.[0]).toContain("mute.onnx: its config names no language");
   });
 
   it("starts one process in JSON mode and reuses it for every chunk", async () => {
@@ -94,6 +122,16 @@ describe("PiperEngine", () => {
     ).rejects.toMatchObject({
       code: "engine_unavailable",
       message: expect.stringContaining("not installed"),
+    });
+  });
+
+  it("reports a binary that cannot be started as engine_unavailable", async () => {
+    const bin = path.join(dir, "not-executable-piper");
+    fs.writeFileSync(bin, "#!/bin/sh\n", { mode: 0o644 });
+
+    await expect(engineWith(5000, bin).open(VOICE)).rejects.toMatchObject({
+      code: "engine_unavailable",
+      message: "The speech engine could not be started.",
     });
   });
 
@@ -174,7 +212,7 @@ describe("PiperEngine", () => {
   };
 
   describe("scratch folder", () => {
-    it("is private to this app process, inside the data directory's tmp folder", async () => {
+    it("is private to this service process", async () => {
       const session = await engineWith().open(VOICE);
       await session.synthesize("Hello.");
 
@@ -206,10 +244,10 @@ describe("PiperEngine", () => {
       expect(fs.readdirSync(elsewhere)).toEqual([]);
     });
 
-    it("removes the folders of app processes that are gone, and only those", () => {
+    it("removes the folders of service processes that are gone, and only those", () => {
       const dead = make("piper-2147483646"); // no such process
       const mine = make(`piper-${process.pid}`); // left by an earlier run with the same id
-      const running = make(`piper-${process.ppid}`); // another app that is still running
+      const running = make(`piper-${process.ppid}`); // another service that is still running
       const stranger = make("something-else");
 
       engineWith().removeLeftovers();
@@ -241,7 +279,7 @@ describe("PiperEngine", () => {
       controller.abort();
       await outcome;
 
-      await until(() => !alive(child) && !alive(pid));
+      await vi.waitFor(() => expect([alive(child), alive(pid)]).toEqual([false, false]), 5000);
       await session.close();
     } finally {
       delete process.env.FAKE_PIPER_CHILD;

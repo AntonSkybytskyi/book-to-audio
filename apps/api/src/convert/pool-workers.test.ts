@@ -106,7 +106,7 @@ describe("WorkerPool: several workers", () => {
       );
       await until(() => h.gates.open.length === 1);
 
-      expect(p.setWorkers(3)).toMatchObject({ workers: 3 });
+      expect(h.setWorkers(3)).toMatchObject({ workers: 3 });
 
       await until(() => h.gates.open.length === 3);
       expect(p.status().activeWorkers).toBe(3);
@@ -125,7 +125,7 @@ describe("WorkerPool: several workers", () => {
       );
       await until(() => h.gates.open.length === 3);
 
-      p.setWorkers(1);
+      h.setWorkers(1);
 
       // Nothing is cancelled: all three chapters are still running.
       expect(h.gates.open).toHaveLength(3);
@@ -142,7 +142,7 @@ describe("WorkerPool: several workers", () => {
 
     it("keeps a worker that is wanted again before it stopped", async () => {
       h.addBook(8);
-      const p = h.start(
+      h.start(
         stubConverter(async (run) => {
           await h.gates.hold(run);
           return ok(run);
@@ -151,8 +151,8 @@ describe("WorkerPool: several workers", () => {
       );
       await until(() => h.gates.open.length === 2);
 
-      p.setWorkers(1);
-      p.setWorkers(2);
+      h.setWorkers(1);
+      h.setWorkers(2);
       h.gates.releaseAll();
 
       await until(() => h.gates.open.length === 2); // both took a next chapter
@@ -174,7 +174,7 @@ describe("WorkerPool: several workers", () => {
       await until(() => h.gates.started.length === 4);
       h.gates.releaseAll(); // the first of these is the third in a row
 
-      await until(() => h.pool?.status().state === "paused");
+      await until(() => h.pool?.status().services[0]?.state === "paused");
       // Both chapters were running, so both end; nothing new starts.
       await until(() => h.repo.chapters(id).filter((c) => c.status === "failed").length === 4);
       expect(h.status(id, 5)).toBe("queued");

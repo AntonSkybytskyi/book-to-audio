@@ -14,12 +14,12 @@ import { EpubError } from "../epub/errors.js";
 import { ParserBusyError } from "../epub/worker-parser.js";
 import type { ParsedEpub } from "../epub/types.js";
 import { sendError } from "./errors.js";
-import type { TtsEngine } from "../tts/engine.js";
+import type { TtsCatalog } from "../tts/catalog.js";
 
 export interface UploadDeps {
   repo: BookRepository;
   storage: Storage;
-  engine: TtsEngine;
+  catalog: TtsCatalog;
   bus: EventBus;
   /** Parses the stored upload. Reads the file itself, so the server never holds it in memory. */
   parseEpub: (filePath: string) => Promise<ParsedEpub>;
@@ -49,7 +49,7 @@ const STATUS_BY_EPUB_ERROR: Record<EpubError["code"], number> = {
 /** `POST /api/books`: stores the upload, parses it and returns the new book. */
 export function registerUpload(
   api: FastifyInstance,
-  { repo, storage, engine, bus, parseEpub, estimator, counter }: UploadDeps,
+  { repo, storage, catalog, bus, parseEpub, estimator, counter }: UploadDeps,
 ) {
   api.post("/books", async (req, reply) => {
     if (!req.isMultipart()) {
@@ -113,7 +113,7 @@ export function registerUpload(
       throw error; // Size limits and everything unexpected go to the error handler.
     }
 
-    const view = loadBookView(repo, engine, estimator, id);
+    const view = loadBookView(repo, catalog, estimator, id);
     if (!view) throw new Error("book vanished after insert");
     counter.enqueue(id);
     bus.publish({ type: "book-added", bookId: id });

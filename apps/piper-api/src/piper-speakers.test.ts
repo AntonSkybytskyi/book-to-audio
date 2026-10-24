@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { usePiperFixture, VOICE } from "../testing/fake-piper.js";
+import { usePiperFixture, VOICE } from "./testing/piper-fixture.js";
 
 const ukConfig = (speakers: Record<string, number>) => ({
   language: { family: "uk", code: "uk_UA" },

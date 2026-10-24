@@ -23,7 +23,7 @@ describe("the language of an uploaded book", () => {
     app = buildServer({
       db: ctx.db,
       storage: ctx.storage,
-      engine: ctx.engine,
+      catalog: ctx.catalog,
       maxUploadBytes: 5 * 1024 * 1024,
       parseEpub: ctx.parseEpub,
       bus: ctx.bus,

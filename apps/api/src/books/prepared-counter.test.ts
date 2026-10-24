@@ -50,7 +50,7 @@ describe("PreparedCounter", () => {
     const c = new PreparedCounter({
       repo: new CountRepository(ctx.db),
       prepare,
-      maxChars: 400,
+      maxChars: () => 400,
       bus: ctx.bus,
       limiter,
       retryDelaysMs: [],

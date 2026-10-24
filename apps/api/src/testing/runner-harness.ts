@@ -10,6 +10,7 @@ import type { AppEvent, BenchmarkEvent } from "../events/bus.js";
 import type { TtsEngine } from "../tts/engine.js";
 import { createTestContext, type TestContext } from "./context.js";
 import { TimedEngine } from "./timed-engine.js";
+import { TtsCatalog } from "../tts/catalog.js";
 
 export const VOICES = [
   { id: "t-en", language: "en", name: "En", sampleRate: 22_050 },
@@ -87,7 +88,7 @@ export function useRunnerHarness(): RunnerHarness {
       h.events.filter((event): event is BenchmarkEvent => event.type === "benchmark"),
     build: (overrides: { engine?: TtsEngine; pool?: PoolStub } = {}) =>
       new BenchmarkRunner({
-        engine: overrides.engine ?? h.engine,
+        catalog: new TtsCatalog([overrides.engine ?? h.engine]),
         repo: h.repo,
         bus: h.ctx.bus,
         pool: overrides.pool ?? { hold: holdFor("hold"), holdWhenIdle: holdFor("holdWhenIdle") },

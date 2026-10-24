@@ -86,10 +86,14 @@ const toStored = (row: Row): StoredBenchmark => ({
 export class BenchmarkRepository {
   constructor(private readonly db: Database.Database) {}
 
-  all(engine: string): StoredBenchmark[] {
+  /** Every result, or those of one TTS service. */
+  all(engine?: string): StoredBenchmark[] {
     const rows = this.db
-      .prepare("SELECT * FROM benchmark_results WHERE engine = ? ORDER BY language, voice_id")
-      .all(engine) as Row[];
+      .prepare(
+        `SELECT * FROM benchmark_results WHERE @engine IS NULL OR engine = @engine
+         ORDER BY language, voice_id`,
+      )
+      .all({ engine: engine ?? null }) as Row[];
     return rows.map(toStored);
   }
 

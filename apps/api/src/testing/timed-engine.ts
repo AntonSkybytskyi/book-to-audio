@@ -17,6 +17,7 @@ export interface TimedEngineOptions {
   /** How many times slower each session is while `active` of them are open. Defaults to no slowdown. */
   contention?: (active: number) => number;
   maxInputChars?: number;
+  concurrency?: number;
 }
 
 /**
@@ -26,7 +27,9 @@ export interface TimedEngineOptions {
  */
 export class TimedEngine implements TtsEngine {
   readonly id = "timed";
-  readonly kind = "local";
+  readonly concurrency: number;
+  readonly ready = true;
+  reachable = true;
   readonly maxInputChars: number;
   /** Milliseconds on the engine's clock. */
   clock = 0;
@@ -46,9 +49,11 @@ export class TimedEngine implements TtsEngine {
       loadMs: 500,
       contention: () => 1,
       maxInputChars: 400,
+      concurrency: 4,
       ...options,
     };
     this.maxInputChars = this.options.maxInputChars;
+    this.concurrency = this.options.concurrency;
   }
 
   readonly now = (): number => this.clock;

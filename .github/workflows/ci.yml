@@ -51,7 +51,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [api, web, edge]
+        app: [api, web, edge, piper-api]
     name: docker (${{ matrix.app }})
     steps:
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -59,7 +59,7 @@ jobs:
         with:
           file: apps/${{ matrix.app }}/Dockerfile
           push: false
-          # Keeps the layers between runs, each image in its own cache (Piper and the voices for api).
+          # Keeps the layers between runs, each image in its own cache (Piper and the voices for piper-api).
           cache-from: type=gha,scope=${{ matrix.app }}
           cache-to: type=gha,mode=max,scope=${{ matrix.app }}
 

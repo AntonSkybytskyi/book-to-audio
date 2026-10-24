@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TtsError } from "../tts/engine.js";
-import { FakeEngine } from "../tts/fake.js";
+import { FakeEngine } from "../testing/fake-engine.js";
 import { SessionHolder } from "./sessions.js";
 
 describe("SessionHolder", () => {

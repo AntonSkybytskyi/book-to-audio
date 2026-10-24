@@ -1,4 +1,4 @@
-import type { BenchmarkInfo, BenchmarkResult } from "./api";
+import type { BenchmarkInfo, BenchmarkResult, BenchmarkServiceInfo } from "./api";
 import type { BenchmarkEvent } from "./events";
 import { formatApprox, pluralize } from "@/ui/shared/lib/format";
 import { languageName } from "@/ui/entities/language/language-names";
@@ -81,12 +81,16 @@ export function loadNote(
     : seen;
 }
 
-/** The hint about the worker count, or null when there are no results to base it on. */
-export function workersHint(info: BenchmarkInfo): string | null {
-  if (info.suggestedWorkers === null) return null;
-  const now = pluralize(info.workers, "worker");
-  if (info.suggestedWorkers === info.workers) {
-    return `The test agrees with your setting of ${now}: more would hardly be faster.`;
+/**
+ * The hint about a speech service's worker count, or null when there are no results to base it on.
+ * `named`: there are several services, so the hint says which one it is about.
+ */
+export function workersHint(service: BenchmarkServiceInfo, named = false): string | null {
+  if (service.suggestedWorkers === null) return null;
+  const now = pluralize(service.workers, "worker");
+  const of = named ? ` for “${service.id}”` : "";
+  if (service.suggestedWorkers === service.workers) {
+    return `The test agrees with your setting of ${now}${of}: more would hardly be faster.`;
   }
-  return `The test suggests ${pluralize(info.suggestedWorkers, "worker")}, which is about as fast as it gets on this computer. You have ${now}. This is only a hint.`;
+  return `The test suggests ${pluralize(service.suggestedWorkers, "worker")}${of}, which is about as fast as it gets. You have ${now}. This is only a hint.`;
 }

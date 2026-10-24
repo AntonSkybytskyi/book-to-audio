@@ -3,7 +3,7 @@ import { afterEach, beforeEach, vi, type Mock } from "vitest";
 import { ChapterQueue } from "../books/queue.js";
 import { BookRepository } from "../books/repository.js";
 import { PoolStateStore } from "../convert/pool-state.js";
-import { WorkerPool, type PoolDeps, type PoolLogger } from "../convert/pool.js";
+import { WorkerPool, type PoolDeps, type PoolLogger, type PoolStatus } from "../convert/pool.js";
 import type { ChapterConverter, ChapterRun, ConvertedChapter } from "../convert/convert-chapter.js";
 import type { AppEvent } from "../events/bus.js";
 import { TtsError } from "../tts/engine.js";
@@ -95,9 +95,11 @@ export interface PoolHarness {
   readonly events: AppEvent[];
   readonly gates: Gates;
   readonly logged: { level: string; context?: object; message: string }[];
-  addBook(chapterCount: number, queued?: boolean): string;
+  addBook(chapterCount: number, queued?: boolean, language?: string): string;
   /** Builds and starts a pool with `workers` workers whose chapters are run by `converter`. */
   start(converter: ChapterConverter, workers?: number, extra?: Partial<PoolDeps>): WorkerPool;
+  /** Sets the started pool's worker count in the settings, as the settings page does. */
+  setWorkers(count: number): PoolStatus;
   status(bookId: string, position: number): string | undefined;
   bookStatus(bookId: string): string | undefined;
 }
@@ -152,14 +154,14 @@ export function usePoolHarness(): PoolHarness {
     },
     gates,
     logged,
-    addBook(chapterCount, queued = true) {
+    addBook(chapterCount, queued = true, language = "en") {
       const id = randomUUID();
       repo.insert(
         {
           id,
           title: "Book",
           author: null,
-          language: "en",
+          language,
           coverMime: null,
           coverPath: null,
           sourcePath: "s",
@@ -173,12 +175,17 @@ export function usePoolHarness(): PoolHarness {
       if (queued) repo.queue(id);
       return id;
     },
+    setWorkers(count) {
+      ctx.settings.setWorkersOverride(ctx.engine.id, count);
+      if (!pool) throw new Error("start the pool first");
+      return pool.refreshWorkers();
+    },
     start(converter, workers = 1, extra = {}) {
-      ctx.settings.setWorkers(workers);
+      ctx.settings.setWorkersOverride(ctx.engine.id, workers);
       pool = new WorkerPool({
         queue,
         converter,
-        engine: ctx.engine,
+        catalog: ctx.catalog,
         state: new PoolStateStore(ctx.db),
         settings: ctx.settings,
         bus: ctx.bus,

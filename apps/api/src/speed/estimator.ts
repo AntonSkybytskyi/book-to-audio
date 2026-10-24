@@ -8,7 +8,7 @@ import {
   type TimeLeftView,
 } from "@book-to-audio/contracts";
 import type { BookLoad } from "../books/repository.js";
-import { pickVoice, type TtsEngine } from "../tts/engine.js";
+import type { TtsCatalog } from "../tts/catalog.js";
 import type { SpeedCalibration } from "./calibration.js";
 export type { BookEstimateView } from "@book-to-audio/contracts";
 
@@ -23,11 +23,12 @@ export interface BookEstimates {
 }
 
 export interface EstimatorDeps {
-  engine: TtsEngine;
+  catalog: TtsCatalog;
   calibration: SpeedCalibration;
-  /** The worker count in use. */
-  workers: () => number;
-  poolPaused: () => boolean;
+  /** The worker count in use for a TTS service. */
+  workers: (service: string) => number;
+  /** The whole pool, or the service's workers, are paused. */
+  poolPaused: (service: string) => boolean;
   /** Seconds the speed test is expected to hold the pool for yet, or null when it is not holding it. */
   speedTestSeconds?: () => number | null;
 }
@@ -48,15 +49,13 @@ export class Estimator {
   constructor(private readonly deps: EstimatorDeps) {}
 
   modelFor(language: string): SpeedModel | null {
-    const voice = pickVoice(this.deps.engine, language);
-    return voice ? this.deps.calibration.modelFor(this.deps.engine.id, voice) : null;
+    const voice = this.deps.catalog.voiceFor(language);
+    return voice ? this.deps.calibration.modelFor(voice.engine, voice) : null;
   }
 
   /** Estimates for every book that is not finished, by book id. */
   forBooks(load: readonly BookLoad[], override?: LanguageOverride): Map<string, BookEstimates> {
-    const { workers: workerCount, poolPaused } = this.deps;
-    const workers = workerCount();
-    const paused = poolPaused();
+    const { catalog, workers: workerCount, poolPaused } = this.deps;
     const speedTest = this.deps.speedTestSeconds?.() ?? null;
     const models = new Map<string, SpeedModel | null>();
     const modelOf = (language: string) => {
@@ -67,6 +66,10 @@ export class Estimator {
     interface Prepared {
       book: BookLoad;
       model: SpeedModel;
+      /** The TTS service that reads the book, its workers and whether they are paused. */
+      service: string;
+      workers: number;
+      paused: boolean;
       remaining: number[];
       remainingSeconds: number;
       generating: boolean;
@@ -86,18 +89,23 @@ export class Estimator {
             }
           : original;
       const model = modelOf(book.language);
-      if (!model) continue;
+      const service = catalog.voiceFor(book.language)?.engine;
+      if (!model || service === undefined) continue;
+      const workers = workerCount(service);
       const remaining = remainingAudio(model, book.chapters);
       prepared.push({
         book,
         model,
+        service,
+        workers,
+        paused: poolPaused(service),
         remaining,
         remainingSeconds: conversionSeconds(model, remaining, workers),
         generating: book.chapters.some((c) => c.status === "generating"),
       });
     }
 
-    const queueFor = (ahead: Prepared[]): QueueView => ({
+    const queueFor = (ahead: Prepared[], paused: boolean): QueueView => ({
       booksAhead: ahead.length,
       startsInSeconds:
         ahead.length === 0 || paused
@@ -107,11 +115,13 @@ export class Estimator {
 
     const result = new Map<string, BookEstimates>();
     for (const [index, entry] of prepared.entries()) {
-      const { book, model } = entry;
+      const { book, model, service, workers, paused } = entry;
       const all = book.chapters.map((c) => audioSecondsFor(model, c.preparedChars));
-      // Ahead of a book that is not queued: everything converting. Otherwise: the converting books before it.
+      // Ahead of a book that is not queued: everything converting on the same service. Otherwise: the
+      // converting books before it on that service. Other services have workers of their own.
       const ahead = prepared.filter(
         (other, i) =>
+          other.service === service &&
           other.book.status === "converting" &&
           other.remainingSeconds > 0 &&
           (book.status === "ready" || i < index),
@@ -120,12 +130,16 @@ export class Estimator {
         audioSeconds: all.reduce((sum, seconds) => sum + seconds, 0),
         convertSeconds: conversionSeconds(model, all, workers),
         source: model.source,
+        service,
         workers,
-        queue: book.status === "ready" ? queueFor(ahead) : { booksAhead: 0, startsInSeconds: null },
+        queue:
+          book.status === "ready"
+            ? queueFor(ahead, paused)
+            : { booksAhead: 0, startsInSeconds: null },
       };
       let timeLeft: TimeLeftView | null = null;
       if (book.status === "converting" || book.status === "paused") {
-        const queue = queueFor(ahead);
+        const queue = queueFor(ahead, paused);
         const waiting = queue.booksAhead > 0 && !entry.generating;
         const held = speedTest !== null && !entry.generating;
         timeLeft = {

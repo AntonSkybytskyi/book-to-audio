@@ -9,13 +9,13 @@ import type { EventBus } from "../events/bus.js";
 import { sendFile } from "../http/send-file.js";
 import type { PoolControl } from "../convert/pool.js";
 import type { Estimator } from "../speed/estimator.js";
-import { pickVoice, type TtsEngine } from "../tts/engine.js";
+import type { TtsCatalog } from "../tts/catalog.js";
 import { sendError } from "./errors.js";
 
 export interface BookRouteDeps {
   repo: BookRepository;
   storage: Storage;
-  engine: TtsEngine;
+  catalog: TtsCatalog;
   bus: EventBus;
   /** Wakes idle workers after a book is queued. */
   pool: Pick<PoolControl, "notify">;
@@ -29,9 +29,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const LANGUAGE_NAMES: Record<Language, string> = { en: "English", uk: "Ukrainian", ru: "Russian" };
 
 export function registerBookRoutes(api: FastifyInstance, deps: BookRouteDeps) {
-  const { repo, storage, engine, bus, pool, estimator, counter } = deps;
+  const { repo, storage, catalog, bus, pool, estimator, counter } = deps;
 
-  const bookView = (id: string) => loadBookView(repo, engine, estimator, id);
+  const bookView = (id: string) => loadBookView(repo, catalog, estimator, id);
 
   /** Validates `:id` and loads the book, replying 400 or 404 itself when it cannot. */
   const withBook = (id: string, reply: FastifyReply) => {
@@ -102,7 +102,7 @@ export function registerBookRoutes(api: FastifyInstance, deps: BookRouteDeps) {
         "Choose the language of the book first: it could not be detected.",
       );
     }
-    if (!pickVoice(engine, book.language)) {
+    if (!catalog.voiceFor(book.language)) {
       const name = LANGUAGE_NAMES[book.language as Language] ?? book.language;
       return sendError(
         reply,

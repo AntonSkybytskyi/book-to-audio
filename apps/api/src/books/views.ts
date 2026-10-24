@@ -1,4 +1,4 @@
-import type { TtsEngine } from "../tts/engine.js";
+import type { TtsCatalog } from "../tts/catalog.js";
 import { toOutputsView } from "../outputs/view.js";
 import {
   audioSecondsFor,
@@ -62,7 +62,7 @@ export function loadSummaries(repo: BookRepository, estimator: Estimator): BookS
 /** A book with its chapters, or null when it does not exist. */
 export function loadBookView(
   repo: BookRepository,
-  engine: TtsEngine,
+  catalog: TtsCatalog,
   estimator: Estimator,
   id: string,
 ): BookView | null {
@@ -73,6 +73,6 @@ export function loadBookView(
     ...toSummaryView(book, estimates),
     speed: estimates?.speed ?? null,
     chapters: repo.chapters(id).map((chapter) => toChapterView(chapter, estimates?.speed ?? null)),
-    availableLanguages: [...new Set(engine.voices().map((v) => v.language))],
+    availableLanguages: catalog.availableLanguages(),
   };
 }

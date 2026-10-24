@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { TtsError, type TtsSession } from "./engine.js";
-import { FakeEngine, type FakeEngineOptions } from "./fake.js";
+import { TtsError, type TtsSession } from "../tts/engine.js";
+import { FakeEngine, type FakeEngineOptions } from "./fake-engine.js";
 
 const openSession = (options?: FakeEngineOptions) => {
   const engine = new FakeEngine(options);
@@ -17,9 +17,9 @@ const attempt = async (session: TtsSession, text: string) => {
 };
 
 describe("FakeEngine", () => {
-  it("describes itself as a local engine with an English voice", () => {
+  it("describes itself as a ready engine with an English voice", () => {
     const engine = new FakeEngine();
-    expect(engine).toMatchObject({ id: "fake", kind: "local" });
+    expect(engine).toMatchObject({ id: "fake", concurrency: 2, ready: true, reachable: true });
     expect(engine.voices()).toEqual([
       { id: "fake-en", language: "en", name: "Fake English", sampleRate: 22_050 },
     ]);

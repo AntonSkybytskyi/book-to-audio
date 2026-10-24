@@ -1,16 +1,10 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ApiError } from "@/ui/shared/api/request";
-import {
-  getSettings,
-  saveShownLanguages,
-  saveWorkers,
-  type Settings,
-} from "@/ui/entities/settings/api";
+import { getSettings, saveShownLanguages, type Settings } from "@/ui/entities/settings/api";
 import { type Language } from "@/ui/entities/language/api";
 import { languageName } from "@/ui/entities/language/language-names";
-import { pluralize } from "@/ui/shared/lib/format";
 import { ALL_LANGUAGES, languageSettingsMessage } from "@/ui/entities/language/language-picker";
 import { usePool } from "@/ui/entities/pool/use-pool";
 import { useLiveQuery } from "@/ui/shared/api/use-live-query";
@@ -18,12 +12,12 @@ import { LoadState } from "@/ui/shared/ui/LoadState";
 import { Page } from "@/ui/shared/ui/Page";
 import { SettingsSection } from "./SettingsSection";
 import { SpeedSection } from "./SpeedSection";
+import { VoicesSection } from "./VoicesSection";
+import { WorkersSection } from "./WorkersSection";
 
 const HELP = "max-w-[38rem] text-ink-muted";
 const LIVE = "text-[0.9rem] text-ink-muted";
 const STATUS = "min-h-[1.6em] text-[0.9rem]";
-const STEP =
-  "grid size-11 cursor-pointer place-items-center rounded-full border border-accent bg-transparent text-[1.4rem] leading-none text-accent transition-[background-color,color,opacity] duration-150 ease-[ease] enabled-hover:bg-accent enabled-hover:text-accent-ink disabled:cursor-not-allowed disabled:border-rule disabled:text-ink-muted disabled:opacity-60";
 
 const never = () => false;
 
@@ -33,11 +27,16 @@ export function SettingsView() {
     data: settings,
     error,
     setData,
+    refresh,
   } = useLiveQuery<Settings>({ key: ["settings"], load, keepPolling: never, intervalMs: 5000 });
+  // Whether each speech service answers, what it reports and its voices come with the settings:
+  // load them again when the live pool says a service came, went or changed its number.
   const pool = usePool();
+  const services = pool?.services.map((s) => `${s.id}:${s.reachable}:${s.reportedWorkers}`).join();
+  useEffect(() => {
+    if (services !== undefined) refresh();
+  }, [services, refresh]);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
   const [languageStatus, setLanguageStatus] = useState<{ text: string; failed: boolean } | null>(
     null,
   );
@@ -64,82 +63,22 @@ export function SettingsView() {
     }
   };
 
-  const change = async (workers: number) => {
-    setSaving(true);
-    setFailure(null);
-    setMessage(null);
-    try {
-      const saved = await saveWorkers(workers);
-      setData(saved);
-      setMessage(`Saved: ${pluralize(saved.workers, "chapter")} at a time.`);
-    } catch (caught) {
-      setFailure(caught instanceof ApiError ? caught.message : "Could not save the setting.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
     <Page>
       <h1 className="font-serif text-[length:clamp(1.6rem,5vw,2.1rem)] leading-[1.2] font-semibold text-balance">
         Settings
       </h1>
 
-      <SettingsSection titleId="workers-title" title="Conversion speed">
-        <p className={HELP}>
-          How many chapters are read aloud at the same time. More is faster but uses more of the
-          processor and memory, because each one runs its own copy of the speech engine. Changes
-          apply at once: extra workers finish the chapter they are on and then stop.
-        </p>
+      <VoicesSection settings={settings} onSaved={setData} />
 
-        <div className="flex items-center gap-4" role="group" aria-labelledby="workers-title">
-          <button
-            type="button"
-            className={STEP}
-            onClick={() => change(settings.workers - 1)}
-            disabled={saving || settings.workers <= 1}
-            aria-label="Fewer chapters at a time"
-          >
-            −
-          </button>
-          <output
-            className="min-w-[2.5ch] text-center font-serif text-[2.5rem] font-semibold tabular-nums"
-            aria-live="polite"
-            aria-label="Chapters at a time"
-          >
-            {settings.workers}
-          </output>
-          <button
-            type="button"
-            className={STEP}
-            onClick={() => change(settings.workers + 1)}
-            disabled={saving || settings.workers >= settings.maxWorkers}
-            aria-label="More chapters at a time"
-          >
-            +
-          </button>
-          <p className="text-[0.85rem] leading-[1.4] text-ink-muted">
-            of up to {settings.maxWorkers}
-            <br />
-            default {settings.defaultWorkers}
-          </p>
-        </div>
+      <WorkersSection settings={settings} onSaved={setData} />
 
-        <p className={STATUS} role="status">
-          {failure ? <span className="text-danger">{failure}</span> : message}
-        </p>
-        {pool && (
-          <p className={LIVE}>
-            {pool.state === "paused"
-              ? "Conversion is paused. Resume it from the banner at the top."
-              : pool.activeWorkers === 0
-                ? "No chapter is being read right now."
-                : `Reading ${pluralize(pool.activeWorkers, "chapter")} right now.`}
-          </p>
-        )}
-      </SettingsSection>
-
-      <SpeedSection workers={settings.workers} />
+      <SpeedSection
+        workers={[
+          ...settings.services.map((service) => `${service.id}=${service.workers}`),
+          ...settings.voices.map((v) => `${v.language}=${v.voice}`),
+        ].join(",")}
+      />
 
       <SettingsSection titleId="languages-title" title="Languages">
         <p className={HELP}>

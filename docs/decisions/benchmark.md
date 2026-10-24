@@ -6,7 +6,7 @@ The spec (section 11) says there is no fixed speed target yet: M1 measures the e
 
 ## What is measured
 
-For **each default voice** (en, uk, ru; the one voice per language the app reads books with) the benchmark reads a fixed sample through the engine's own sessions (`TtsEngine.open` / `synthesize`, the same code a conversion uses, so the fake engine works for tests and development) and records:
+For **each default voice** (en, uk, ru; the one voice per language the app reads books with) the benchmark reads a fixed sample through the engine's own sessions (`TtsEngine.open` / `synthesize`, the same code a conversion uses: since ANO-16 that is the HTTP client of the voice's TTS service, and in tests an in-memory engine) and records:
 
 | Number | How | What it is for |
 | --- | --- | --- |
@@ -16,7 +16,7 @@ For **each default voice** (en, uk, ru; the one voice per language the app reads
 | **Throughput with N sessions** | N sessions read the sample at the same time, each chunk synthesized and then encoded as a worker does; audio seconds of all sessions / wall seconds | how the speed grows when Piper processes compete for cores (it does not grow linearly) |
 | **Model load** | time of `open` plus the warm-up line | reported apart, not in any factor |
 
-N runs from 1 up to the most workers the settings allow, capped at 4, and also the worker count in use when it is higher (so it is measured, not guessed), up to 8. Each phase reads the sample twice (`DEFAULT_REPEAT`): the engine is quick, one pass is a few seconds, and a busy moment on the machine would otherwise be the whole measurement. Every session it opens is closed, also on failure or cancel.
+N runs from 1 up to the number of requests the voice's TTS service handles at once (or its worker count, when that is higher), capped at 4, and also the service's worker count in use when it is higher (so it is measured, not guessed), up to 8. Each phase reads the sample twice (`DEFAULT_REPEAT`): the engine is quick, one pass is a few seconds, and a busy moment on the machine would otherwise be the whole measurement. Every session it opens is closed, also on failure or cancel.
 
 **The sample** (`benchmark/samples.ts`) is three scenes of plain prose written for this app (so no licence applies), the same story in English, Ukrainian and Russian: a ferry in the fog, with description, a dialogue, a year, a time of day, a count, a price and a percentage, about 1,100 characters after preparation (two chunks of the engine's 1,000-character limit, 65 s of audio). It goes through `prepareForSpeech` like a chapter, so the Ukrainian numbers are spelled out and the rate is per character of what the engine is really given. The warm-up is one short line per language.
 
@@ -30,7 +30,7 @@ N runs from 1 up to the most workers the settings allow, capped at 4, and also t
 
 **Cancel** aborts the signal that reaches every `synthesize` call: a Piper process that is working is killed (its process group), the sessions are closed and awaited, the scratch folder is removed, the hold is released, and nothing is saved (results are written together, in one transaction, when every voice is done, with the load average at the start and the end and how long the run took (migration 9); a voice that cannot be measured is skipped and the others are kept). Checked in the container: no `piper` process is left after a cancel.
 
-Results live in `benchmark_results` (one row per engine and voice, replaced by the next run) with the CPU count and model, the text version and the time; `GET /api/benchmark` returns them with the state of a run, and the `benchmark` event carries its progress.
+Results live in `benchmark_results` (one row per TTS service and voice, replaced by the next run) with the CPU count and model, the text version and the time; `GET /api/benchmark` returns them with the state of a run, and the `benchmark` event carries its progress.
 
 ## Estimates
 
@@ -93,7 +93,7 @@ The -32% row is the honest weak spot: the benchmark was taken at a lighter load 
 
 It is a statement about this machine: another computer gets its own number from the same test, and the app never promises a time, it shows its estimate before each conversion. A machine that comes out slower than 5 times real time (a 90,000-word novel over 2 hours) is where thread tuning, a smaller worker count or a GPU (out of scope) would be worth a look.
 
-**Default worker count.** The default is half the cores (6 of 12 here), and **that is wasteful on this machine**: one Piper process already uses about 7 cores, the throughput stops growing at 2 to 3 sessions, and every extra worker holds a model in memory for nothing. Recommendation, not applied: make the default `min(cores / 2, 3)` (a one-line change in `SettingsStore`). It needs the owner's decision, because the right number depends on how many threads Piper is told to use (known gap below).
+**Default worker count.** The default is half the cores (6 of 12 here), and **that is wasteful on this machine**: one Piper process already uses about 7 cores, the throughput stops growing at 2 to 3 sessions, and every extra worker holds a model in memory for nothing. Recommendation, not applied: make the default `min(cores / 2, 3)`. Since ANO-16 the default is `PIPER_CONCURRENCY` in piper-api, still half the cores (at most one per GB of its memory limit), and the app's worker count follows it. It needs the owner's decision, because the right number depends on how many threads Piper is told to use (known gap below).
 
 ## Known gaps
 

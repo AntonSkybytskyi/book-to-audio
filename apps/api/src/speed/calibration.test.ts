@@ -43,7 +43,7 @@ describe("speed calibration and learning", () => {
 
   afterEach(() => ctx.cleanup());
 
-  const learner = () => new SpeedLearning("e", calibration, learning);
+  const learner = () => new SpeedLearning(calibration, learning);
   const benchmarkIt = () =>
     benchmarks.save([measured], { cpuCount: 8, cpuModel: "cpu" }, 3, "2026-01-01T00:00:00Z");
 
@@ -115,6 +115,7 @@ describe("speed calibration and learning", () => {
 
   describe("SpeedLearning", () => {
     const chapter = {
+      engine: "e",
       voiceId: "v-en",
       language: "en",
       preparedChars: 10_000,

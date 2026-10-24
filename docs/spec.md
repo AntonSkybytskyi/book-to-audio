@@ -93,27 +93,27 @@ Later versions will allow any language that an installed TTS engine supports.
 
 ### Pluggable engines
 
-TTS sits behind an engine interface so engines can be added without changing the rest of the app. Each engine reports:
+TTS runs in separate TTS services that the core reaches only over one small HTTP API, the same for every service ([`packages/contracts/openapi/tts-service.yaml`](../packages/contracts/openapi/tts-service.yaml), [decision](decisions/tts-services.md)). Each service reports:
 
-- the languages and voices it offers;
-- whether it runs locally or calls a paid cloud API;
-- its maximum input size per request.
+- the voices it offers and their languages;
+- its maximum input size per request;
+- how many requests it handles at once.
 
-And it implements one operation: synthesize a chunk of text with a given voice and speed, returning audio.
+And it implements one operation: synthesize a chunk of text with a given voice, returning audio (a WAV file). The core can be pointed at several services at once (`TTS_SERVICES`), and each language can be read by a voice from any of them.
 
 ### Default engine: local
 
 **Role of the local engine.** The local engine is mainly for building and testing the MVP: it is free, fast to iterate with and needs no API keys. After the MVP, a cloud TTS engine is expected to become the main engine for real listening, since voice quality matters more than cost for the owner.
 
-v1 ships with one local engine that is free and works offline. It must have usable voices for English, Ukrainian and Russian. **Piper** is the proposed default, since it has voices for all three languages and runs on CPU. It runs as a separate process inside the core's Docker image and is called from the Node backend.
+v1 ships with one local engine that is free and works offline. It must have usable voices for English, Ukrainian and Russian. **Piper** is the default, since it has voices for all three languages and runs on CPU. It runs in its own service, `piper-api` (TypeScript), with the Piper binary and the voice models in that service's Docker image.
 
-**v1 is strictly TypeScript.** The app has no services written in other languages: an engine is either a Node library (for example an ONNX model run in Node) or a prebuilt binary started as a child process. Engines that need a Python or other runtime as a separate service are not used in v1. The engine interface is designed so such a service can be added later without changing the rest of the app, and the known trade-off is that v1 voice quality, especially for Ukrainian, is limited to what Piper and similar engines offer.
+**The services in this repo are TypeScript.** A service that needs a Python or other runtime can be added later behind the same HTTP API without changing the rest of the app; the known trade-off is that v1 voice quality, especially for Ukrainian, is limited to what Piper and similar engines offer.
 
-Other engines (local such as Kokoro for higher-quality English, or cloud such as OpenAI, ElevenLabs, Google or Azure) are added later through the same interface. Cloud engines must show an estimated cost before a conversion starts and need an API key set in the configuration.
+Other engines (local such as Kokoro for higher-quality English, or cloud such as OpenAI, ElevenLabs, Google or Azure) are added later as more TTS services behind the same API. Cloud engines must show an estimated cost before a conversion starts and need an API key set in the configuration.
 
 ### Voice and speed
 
-In v1 each language has one default voice, and speed is fixed at 1.0×. Later versions add a voice picker filtered by language, a speed setting (0.75× to 1.5×) and a voice sample button.
+Each language is read by one voice: by default the first voice for it, services in `TTS_SERVICES` order; the Settings page can pick another voice for a language, from any service. A new voice applies from the next chapter on. Speed is fixed at 1.0×. Later versions add a speed setting (0.75× to 1.5×) and a voice sample button.
 
 ## 8. Output
 
@@ -130,14 +130,14 @@ Audio is encoded with ffmpeg. Default quality: mono, 32 kbps Opus for chapter We
 
 - Uploading and parsing are independent of conversion, so new books can be uploaded and previewed while others are converting.
 - Several books can be queued for conversion at once. Each queued book is split into chapter tasks, and all chapter tasks go into one global pool.
-- N workers take tasks from the pool, from any book. Each worker runs its own TTS engine process. N defaults to half the CPU cores and can be changed in settings.
+- Workers take tasks from the pool, from any book, in a group per TTS service: a service gets as many workers as it says it handles at once, which can be changed per service in settings. A worker only takes chapters whose language is read by a voice on its service. A service that does not answer gets no workers; its chapters wait.
 - Tasks are taken **FIFO by book**: chapters of the earliest queued book go first, in chapter order. When that book has no unstarted chapters left, free workers move on to the next book, so no worker sits idle.
 - When all chapters of a book are done, its M4B and WebM ZIP are built.
 - A book can be paused and resumed. Pausing lets running chapters finish and stops new ones from starting. Reordering the queue is not supported in v1.
 - Progress is saved per chunk. If the app or container restarts, the job **resumes** from the last finished chunk instead of starting over.
 - A failed chunk is retried up to 3 times. If it still fails, that chapter is marked **failed** with the error message. Other chapters of the book, and other books, keep going.
 - When the remaining chapters finish, the book's status is **done with errors**. The M4B and WebM ZIP are not built until every chapter is done. Failed chapters are fixed with **regenerate** on the book page (section 3).
-- If 3 chapters fail in a row (for example, the TTS engine is missing or broken), the whole pool pauses and the UI shows a banner with the error, so the queue does not fail book after book.
+- If 3 chapters of one TTS service fail in a row (for example, its engine is missing or broken), that service's workers pause and the UI shows a banner with the error, so the queue does not fail book after book; books read by other services keep going. A nearly full disk pauses the whole pool.
 - There is no separate cancel. To stop for now, pause the book; to get rid of it, delete it. Deleting a book (from its page or the library) stops its running chapters and removes all its files.
 - The UI gets progress updates through server-sent events (or polling as a fallback).
 
@@ -159,13 +159,13 @@ Audio is encoded with ffmpeg. Default quality: mono, 32 kbps Opus for chapter We
 
 TypeScript end to end.
 
-- **App:** two Node.js services behind nginx, which is the only published port and keeps one origin for the browser. The core (Fastify) serves the HTTP API under `/api` (uploads, jobs, downloads, live updates); the web app (Next.js App Router, React, built as a standalone server) serves the pages, which load all their data from the API in the browser. Restarting the web app does not interrupt a conversion.
+- **App:** two Node.js services behind nginx, plus the TTS services the core calls, which is the only published port and keeps one origin for the browser. The core (Fastify) serves the HTTP API under `/api` (uploads, jobs, downloads, live updates); the web app (Next.js App Router, React, built as a standalone server) serves the pages, which load all their data from the API in the browser. Restarting the web app does not interrupt a conversion.
 - **Database:** SQLite through `better-sqlite3`, with numbered migrations applied at startup.
-- **Workers:** a scheduler in the backend process takes chapter tasks from the global pool and runs N TTS engine processes (section 9).
+- **Workers:** a scheduler in the backend process takes chapter tasks from the global pool and sends their text to the TTS services, with a group of workers per service (section 9).
 - **Parsing:** an EPUB library or an in-house parser (decided in the M1 parsing ticket), and `pdfjs-dist` for PDF text and outline.
-- **TTS:** Piper binary and voice models in the core's Docker image, called as a child process.
+- **TTS:** TTS services behind one HTTP API. `piper-api` keeps Piper processes warm, at most `PIPER_CONCURRENCY` across all voices (several can share one voice), with the binary and voice models in its own Docker image.
 - **Audio:** ffmpeg for encoding, joining chunks and writing chapters and tags.
-- **Packaging:** one Docker image each for nginx, the web app and the core, run by `docker-compose.yml`; the data volume belongs to the core.
+- **Packaging:** one Docker image each for nginx, the web app, the core and `piper-api`, run by `docker-compose.yml`; the data volume belongs to the core.
 
 Exact libraries are chosen during implementation.
 
@@ -179,7 +179,7 @@ Exact libraries are chosen during implementation.
 - Cloud TTS engines (the interface supports them; none ship in v1).
 - Editing book text or a pronunciation dictionary.
 - Excluding or renaming chapters (the chapter preview is view only).
-- Choosing voice, speed or output format, and voice samples.
+- Choosing speed or output format, and voice samples.
 - Reordering the conversion queue.
 - Per-sentence language detection and voice switching.
 - Player features beyond play/pause: auto-advance, remembered position, playback speed, skip buttons, seek bar.

@@ -1,4 +1,10 @@
-import { TtsError, type PcmAudio, type TtsEngine, type TtsSession, type Voice } from "./engine.js";
+import {
+  TtsError,
+  type PcmAudio,
+  type TtsEngine,
+  type TtsSession,
+  type Voice,
+} from "../tts/engine.js";
 
 const SAMPLE_RATE = 22_050;
 /** Roughly the pace of spoken English. */
@@ -7,9 +13,13 @@ const CHARS_PER_SECOND = 15;
 const FLAKY_FAILURES = 2;
 
 export interface FakeEngineOptions {
+  /** The engine's name, as `TTS_SERVICES` would give it. */
+  id?: string;
   voices?: Voice[];
   /** Longest text one call accepts; small values make short chapters split into many chunks. */
   maxInputChars?: number;
+  /** Sessions the engine says it serves at once. */
+  concurrency?: number;
   /** Pretend synthesis takes this long, so progress is visible in the UI. */
   delayMs?: number;
   /** Any chunk containing this text always fails, like a crashing engine. */
@@ -21,13 +31,15 @@ export interface FakeEngineOptions {
 }
 
 /**
- * Deterministic engine for development and tests. It needs no binaries and
- * returns a quiet tone whose length scales with the text. The markers make
- * failures reproducible (`FAKE_TTS_FAIL_MARKER`, `FAKE_TTS_FLAKY_MARKER`).
+ * Deterministic in-memory engine for tests. It needs no service and returns a
+ * quiet tone whose length scales with the text. The markers make failures
+ * reproducible.
  */
 export class FakeEngine implements TtsEngine {
-  readonly id = "fake";
-  readonly kind = "local";
+  readonly id: string;
+  readonly concurrency: number;
+  ready = true;
+  reachable = true;
   readonly maxInputChars: number;
   /** Sessions opened and closed so far, for tests that check nothing is left running. */
   opened = 0;
@@ -38,7 +50,9 @@ export class FakeEngine implements TtsEngine {
 
   constructor(options: FakeEngineOptions = {}) {
     this.options = options;
+    this.id = options.id ?? "fake";
     this.maxInputChars = options.maxInputChars ?? 400;
+    this.concurrency = options.concurrency ?? 2;
     this.voiceList = options.voices ?? [
       { id: "fake-en", language: "en", name: "Fake English", sampleRate: SAMPLE_RATE },
     ];

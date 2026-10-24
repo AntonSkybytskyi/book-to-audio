@@ -1,5 +1,6 @@
 import type { Book, BookSummary } from "./api";
 import { aboutDuration, formatClock, pluralize } from "@/ui/shared/lib/format";
+import type { PauseReason } from "@/ui/entities/pool/pool";
 import { libraryTimeLeft } from "./time-left";
 
 const ready = (book: Pick<BookSummary, "doneCount" | "chapterCount">) =>
@@ -7,17 +8,17 @@ const ready = (book: Pick<BookSummary, "doneCount" | "chapterCount">) =>
 
 const withLeft = (head: string, left: string | null) => (left ? `${head} · ${left}` : head);
 
-/** The status line of a book in the library. `poolPaused`: all conversion is paused. */
-export function libraryStatus(book: BookSummary, poolPaused = false): string {
+/** The status line of a book in the library. `pause`: what holds up its conversion, if anything. */
+export function libraryStatus(book: BookSummary, pause: PauseReason = null): string {
   switch (book.status) {
     case "ready":
       return book.estimate
         ? `Ready to convert · ${aboutDuration(book.estimate.audioSeconds)} of audio`
         : "Ready to convert";
     case "converting":
-      return withLeft(`Converting · ${ready(book)}`, libraryTimeLeft(book, poolPaused));
+      return withLeft(`Converting · ${ready(book)}`, libraryTimeLeft(book, pause !== null));
     case "paused":
-      return withLeft(`Paused · ${ready(book)}`, libraryTimeLeft(book, poolPaused));
+      return withLeft(`Paused · ${ready(book)}`, libraryTimeLeft(book, pause !== null));
     case "done":
       return `Ready to listen · ${ready(book)} · ${formatClock(book.durationSeconds)}${book.outputs.available ? " · Ready to download" : ""}`;
     case "done_with_errors":
@@ -26,18 +27,21 @@ export function libraryStatus(book: BookSummary, poolPaused = false): string {
 }
 
 /**
- * The line under the progress bar on the book page. `poolPaused` is the pause of all
- * conversion (a failing engine, a full disk); `paused` is this book's own pause.
+ * The line under the progress bar on the book page. `pause` is the pause of all conversion (a full
+ * disk) or of the book's speech service (its chapters kept failing); `paused` is this book's own pause.
  */
-export function bookSummary(book: Book, poolPaused: boolean): string {
+export function bookSummary(book: Book, pause: PauseReason): string {
   const total = pluralize(book.chapterCount, "chapter");
   const running = book.chapters.some((chapter) => chapter.status === "generating");
   switch (book.status) {
     case "ready":
       return "Not converted yet.";
     case "converting":
-      if (poolPaused) {
+      if (pause === "all") {
         return `Waiting: conversion is paused for every book. ${book.doneCount} of ${total} ready.`;
+      }
+      if (pause === "service") {
+        return `Waiting: the speech service that reads this book is paused. ${book.doneCount} of ${total} ready.`;
       }
       return `Converting: ${book.doneCount} of ${total} ready.`;
     case "paused":

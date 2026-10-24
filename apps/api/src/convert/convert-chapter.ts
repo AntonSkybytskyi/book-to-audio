@@ -5,7 +5,8 @@ import type { ClaimedChapter } from "../books/queue.js";
 import type { Storage } from "../books/storage.js";
 import { UserFacingError } from "../errors.js";
 import { TEXT_PROCESSING_VERSION } from "../text/index.js";
-import { pickVoice, TtsError, type PcmAudio, type TtsEngine } from "../tts/engine.js";
+import type { TtsCatalog } from "../tts/catalog.js";
+import { TtsError, type PcmAudio } from "../tts/engine.js";
 import { prepareInThread, type TextPreparer } from "./chapter-text.js";
 import type { ChunkStore } from "./chunk-store.js";
 import { DEFAULT_RETRY_DELAYS_MS, sleep, type Sleep } from "./retry.js";
@@ -16,7 +17,7 @@ export interface ConverterLogger {
 }
 
 export interface ChapterConverterDeps {
-  engine: TtsEngine;
+  catalog: TtsCatalog;
   storage: Storage;
   chunks: ChunkStore;
   /** Encodes one chunk to a WebM/Opus file at `outputPath`. */
@@ -51,7 +52,7 @@ export interface ConvertedChapter {
 
 export interface ChapterRun {
   task: ClaimedChapter;
-  /** The worker's engine session, reused across chunks and chapters. */
+  /** The worker's engine session, reused across chunks and chapters; it is on the worker's TTS service. */
   sessions: SessionHolder;
   signal: AbortSignal;
   /**
@@ -79,11 +80,20 @@ const hasWords = (text: string) => /[\p{L}\p{N}]/u.test(text);
 
 const cancelled = () => new TtsError("aborted", "Conversion was cancelled");
 
-/** Retrying cannot help when the engine or voice is missing, or the text itself is the problem. */
-const NOT_RETRYABLE = new Set(["engine_unavailable", "voice_not_found", "bad_input", "aborted"]);
+/**
+ * Retrying cannot help when the engine or voice is missing, or the text itself is the problem. A
+ * service that does not answer was already tried again by the client.
+ */
+const NOT_RETRYABLE = new Set([
+  "engine_unavailable",
+  "voice_not_found",
+  "bad_input",
+  "aborted",
+  "unreachable",
+]);
 
 export function createChapterConverter({
-  engine,
+  catalog,
   storage,
   chunks: store,
   encode,
@@ -140,12 +150,13 @@ export function createChapterConverter({
   return {
     async convert(run) {
       const { task, signal } = run;
-      const voice = pickVoice(engine, task.language);
-      if (!voice) {
-        throw new TtsError("voice_not_found", `No ${task.language} voice is installed`);
-      }
+      const voice = catalog.voiceFor(task.language);
+      // The language's voice moved to another service, or went away, after the claim: the chapter
+      // goes back to the queue for the workers of the service that reads it now.
+      if (!voice || voice.engine !== run.sessions.engineId) throw cancelled();
 
-      const texts = await prepareText(task.text, task.language, engine.maxInputChars, signal);
+      const maxChars = catalog.maxCharsFor(task.language);
+      const texts = await prepareText(task.text, task.language, maxChars, signal);
       if (signal.aborted) throw cancelled();
       if (texts.length === 0) {
         throw new TtsError("bad_input", "This chapter has no text to read aloud.");
@@ -153,10 +164,10 @@ export function createChapterConverter({
       const total = texts.length;
       const counts = { retries: 0 };
 
-      // Chunks are only reused if they were made by this engine, voice and speaker, from text
+      // Chunks are only reused if they were made by this service, voice and speaker, from text
       // prepared by the same rules, for the same split.
       const first = store.open(task.bookId, task.position, {
-        engine: engine.id,
+        engine: voice.engine,
         voice: voice.id,
         speaker: voice.speaker ?? null,
         sampleRate: voice.sampleRate,

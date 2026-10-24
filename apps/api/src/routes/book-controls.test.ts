@@ -8,6 +8,7 @@ import { ChapterQueue } from "../books/queue.js";
 import { BookRepository } from "../books/repository.js";
 import type { AppEvent } from "../events/bus.js";
 import { createTestContext, type TestContext } from "../testing/context.js";
+import { LANGUAGES } from "../books/languages.js";
 
 interface BookJson {
   id: string;
@@ -57,7 +58,7 @@ describe("book control routes", () => {
     fs.writeFileSync(path.join(ctx.storage.bookDir(id), "source.epub"), "epub");
     if (convert) repo.queue(id);
     for (let i = 0; i < done; i++) {
-      const task = queue.claimNext();
+      const task = queue.claimNext(LANGUAGES);
       if (!task) throw new Error("expected a chapter");
       const rel = ctx.storage.audioRelPath(id, task.position);
       fs.writeFileSync(ctx.storage.resolve(rel), "0123456789");
@@ -78,7 +79,7 @@ describe("book control routes", () => {
     app = buildServer({
       db: ctx.db,
       storage: ctx.storage,
-      engine: ctx.engine,
+      catalog: ctx.catalog,
       maxUploadBytes: 1024 * 1024,
       bus: ctx.bus,
       pool: ctx.pool,

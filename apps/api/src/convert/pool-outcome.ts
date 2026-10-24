@@ -55,6 +55,7 @@ export function failBestEffort(
 /** Tells the speed estimates how long the chapter took; never lets that fail the chapter. */
 export function recordTiming(
   deps: PoolDeps,
+  engine: string,
   task: ClaimedChapter,
   converted: ConvertedChapter,
   {
@@ -70,6 +71,7 @@ export function recordTiming(
   if (disturbed) return;
   try {
     deps.learner.recordChapter({
+      engine,
       voiceId,
       language: task.language,
       preparedChars,

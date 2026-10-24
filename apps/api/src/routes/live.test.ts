@@ -37,7 +37,7 @@ describe("live updates and pool routes", () => {
     buildServer({
       db: ctx.db,
       storage: ctx.storage,
-      engine: ctx.engine,
+      catalog: ctx.catalog,
       maxUploadBytes: 1024 * 1024,
       parseEpub: ctx.parseEpub,
       bus: ctx.bus,
@@ -142,6 +142,17 @@ describe("live updates and pool routes", () => {
         workers: 2,
         activeWorkers: 0,
         held: false,
+        services: [
+          {
+            id: "fake",
+            state: "running",
+            error: null,
+            reachable: true,
+            workers: 2,
+            reportedWorkers: 2,
+            activeWorkers: 0,
+          },
+        ],
       });
       stream.destroy();
     });
@@ -429,15 +440,28 @@ describe("live updates and pool routes", () => {
         workers: 2,
         activeWorkers: 0,
         held: false,
+        services: [
+          {
+            id: "fake",
+            state: "running",
+            error: null,
+            reachable: true,
+            workers: 2,
+            reportedWorkers: 2,
+            activeWorkers: 0,
+          },
+        ],
       });
     });
 
     it("resumes a paused pool and tells listeners", async () => {
       const state = new PoolStateStore(ctx.db);
-      for (const message of ["a", "b", "Engine is down."]) state.recordFailure(message);
+      state.pause("disk", "The disk is almost full.");
+      for (const message of ["a", "b", "Engine is down."]) state.recordFailure("fake", message);
       expect((await app.inject({ url: "/api/pool" })).json()).toMatchObject({
         state: "paused",
-        error: "Engine is down.",
+        error: "The disk is almost full.",
+        services: [{ id: "fake", state: "paused", error: "Engine is down." }],
       });
       const seen: AppEvent[] = [];
       ctx.bus.subscribe((event) => seen.push(event));
@@ -445,14 +469,32 @@ describe("live updates and pool routes", () => {
       const res = await app.inject({ method: "POST", url: "/api/pool/resume" });
 
       expect(res.statusCode).toBe(200);
-      expect(res.json()).toMatchObject({ state: "running", error: null });
-      expect(seen).toContainEqual(expect.objectContaining({ type: "pool", state: "running" }));
-      expect(state.get()).toEqual({
+      expect(res.json()).toMatchObject({
         state: "running",
         error: null,
-        cause: null,
+        services: [{ state: "running", error: null }],
+      });
+      expect(seen).toContainEqual(expect.objectContaining({ type: "pool", state: "running" }));
+      expect(state.get()).toEqual({ state: "running", error: null, cause: null });
+      expect(state.service("fake")).toEqual({
+        state: "running",
+        error: null,
         consecutiveFailures: 0,
       });
+    });
+
+    it("resumes only the service it is asked to", async () => {
+      const state = new PoolStateStore(ctx.db);
+      state.pause("disk", "The disk is almost full.");
+      for (const message of ["a", "b", "c"]) state.recordFailure("fake", message);
+
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/pool/resume",
+        payload: { service: "fake" },
+      });
+
+      expect(res.json()).toMatchObject({ state: "paused", services: [{ state: "running" }] });
     });
 
     it("answers 200 when there is nothing to resume", async () => {
@@ -474,41 +516,53 @@ describe("live updates and pool routes", () => {
   });
 
   describe("settings", () => {
-    it("reports the worker count, its range and the default", async () => {
+    it("reports each service's workers, the range and the shown languages", async () => {
       const res = await app.inject({ url: "/api/settings" });
 
       expect(res.json()).toEqual({
-        workers: 2,
-        maxWorkers: 4,
-        defaultWorkers: 2,
+        services: [{ id: "fake", reachable: true, reported: 2, override: null, workers: 2 }],
+        voices: [
+          {
+            language: "en",
+            voice: "fake-en",
+            chosen: null,
+            options: [{ id: "fake-en", service: "fake", name: "Fake English" }],
+          },
+        ],
+        maxWorkers: 64,
         shownLanguages: ["en", "uk"],
       });
     });
 
-    it("changes the worker count of the running pool and keeps it", async () => {
+    it("changes a service's worker count in the running pool, keeps it, and goes back to the reported one", async () => {
       const seen: AppEvent[] = [];
       ctx.bus.subscribe((event) => seen.push(event));
 
-      const up = await patch({ workers: 4 });
+      const up = await patch({ workers: { fake: 4 } });
       expect(up.statusCode).toBe(200);
-      expect(up.json()).toMatchObject({ workers: 4 });
+      expect(up.json()).toMatchObject({ services: [{ override: 4, workers: 4 }] });
       expect(ctx.pool.status().workers).toBe(4);
       expect(seen).toContainEqual(expect.objectContaining({ type: "pool", workers: 4 }));
 
-      const down = await patch({ workers: 1 });
-      expect(down.json()).toMatchObject({ workers: 1 });
+      const down = await patch({ workers: { fake: 1 } });
+      expect(down.json()).toMatchObject({ services: [{ override: 1, workers: 1 }] });
       expect(ctx.pool.status().workers).toBe(1);
-      expect((await app.inject({ url: "/api/settings" })).json()).toMatchObject({ workers: 1 });
+
+      const reset = await patch({ workers: { fake: null } });
+      expect(reset.json()).toMatchObject({ services: [{ override: null, workers: 2 }] });
+      expect(ctx.pool.status().workers).toBe(2);
     });
 
     it.each([
-      ["zero", { workers: 0 }],
-      ["negative", { workers: -1 }],
-      ["above the number of cores", { workers: 5 }],
-      ["a fraction", { workers: 1.5 }],
-      ["a string", { workers: "2" }],
-      ["null", { workers: null }],
-      ["an unknown setting", { workers: 2, colour: "red" }],
+      ["zero", { workers: { fake: 0 } }],
+      ["negative", { workers: { fake: -1 } }],
+      ["above the limit", { workers: { fake: 65 } }],
+      ["a fraction", { workers: { fake: 1.5 } }],
+      ["a string", { workers: { fake: "2" } }],
+      ["a bare number", { workers: 2 }],
+      ["an unknown service", { workers: { other: 2 } }],
+      ["no service", { workers: {} }],
+      ["an unknown setting", { workers: { fake: 2 }, colour: "red" }],
       ["nothing", {}],
     ])("rejects %s and changes nothing", async (_name, payload) => {
       const res = await patch(payload);
@@ -516,7 +570,7 @@ describe("live updates and pool routes", () => {
       expect(res.statusCode).toBe(400);
       expect(res.json()).toMatchObject({ error: "bad_request" });
       expect(ctx.pool.status().workers).toBe(2);
-      expect(ctx.settings.workers()).toBe(2);
+      expect(ctx.settings.workersOverride("fake")).toBeUndefined();
     });
   });
 });

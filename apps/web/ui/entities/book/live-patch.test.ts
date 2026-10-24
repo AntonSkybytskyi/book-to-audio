@@ -164,6 +164,7 @@ describe("patchBook", () => {
         workers: 1,
         activeWorkers: 0,
         held: false,
+        services: [],
       }),
     ).toBe(before);
     expect(patchBook(before, { type: "book-added", bookId: "b1" })).toBe(before);
@@ -369,6 +370,7 @@ const poolEvent = (held: boolean): LiveEvent => ({
   workers: 2,
   activeWorkers: 0,
   held,
+  services: [],
 });
 
 describe("patchLibrary while a book waits for the speed test", () => {

@@ -80,6 +80,10 @@ const book = (overrides: Partial<Book> = {}): Book => ({
   ...overrides,
 });
 
+/** The live pool with `n` workers for the book's speech service. */
+const workers = (n: number) =>
+  pool({ services: pool().services.map((s) => ({ ...s, workers: n })) });
+
 const pool = (overrides: Partial<PoolStatus> = {}): PoolStatus => ({
   state: "running",
   error: null,
@@ -87,6 +91,17 @@ const pool = (overrides: Partial<PoolStatus> = {}): PoolStatus => ({
   workers: 1,
   activeWorkers: 1,
   held: false,
+  services: [
+    {
+      id: "piper",
+      state: "running",
+      error: null,
+      reachable: true,
+      workers: 1,
+      reportedWorkers: 1,
+      activeWorkers: 1,
+    },
+  ],
   ...overrides,
 });
 
@@ -175,6 +190,18 @@ describe("bookTimeLeft", () => {
     );
   });
 
+  it("says paused, with no number, while the book's speech service is paused", () => {
+    const read = book({ estimate: estimate({ service: "piper" }) });
+    const services = pool().services.map((s) => ({ ...s, state: "paused" as const }));
+
+    expect(bookTimeLeft(read, pool({ services }))).toMatch(
+      /the speech service that reads this book is paused/,
+    );
+    expect(
+      bookTimeLeft(book({ estimate: estimate({ service: "other" }) }), pool({ services })),
+    ).not.toMatch(/paused/);
+  });
+
   it("says when a book waiting in the queue starts, and what comes after", () => {
     const waiting = book({
       timeLeft: timeLeft({ state: "waiting", booksAhead: 2, startsInSeconds: 3600 }),
@@ -229,8 +256,9 @@ describe("bookTimeLeft", () => {
     expect(bookTimeLeft(reading, pool({ held: true }))).not.toMatch(/speed test/);
   });
 
-  it("uses the worker count of the live pool, not the one the page loaded with", () => {
+  it("uses the worker count of the book's service in the live pool, not the one the page loaded with", () => {
     const wide = book({
+      estimate: estimate({ service: "piper", workers: 2 }),
       speed: {
         ...speed,
         throughput: [
@@ -241,12 +269,11 @@ describe("bookTimeLeft", () => {
       chapters: Array.from({ length: 4 }, (_, i) => chapter(i + 1, { preparedChars: 60_000 })),
     });
 
-    expect(bookTimeLeft(wide, pool({ workers: 1 }))).toBe(bookTimeLeft(wide, pool({ workers: 1 })));
     // Four workers scale perfectly here, so they take a quarter of the time of one.
     expect(remainingNow(wide, 4)).toBeCloseTo((remainingNow(wide, 1) ?? 0) / 4);
-    expect(bookTimeLeft(wide, pool({ workers: 1 }))).not.toBe(
-      bookTimeLeft(wide, pool({ workers: 4 })),
-    );
+    expect(bookTimeLeft(wide, workers(1))).not.toBe(bookTimeLeft(wide, workers(4)));
+    // Without the live pool, the count the page loaded with.
+    expect(bookTimeLeft(wide, null)).not.toBe(bookTimeLeft(wide, workers(4)));
   });
 });
 
@@ -319,6 +346,7 @@ const estimate = (overrides: Partial<BookEstimate> = {}): BookEstimate => ({
   audioSeconds: 10 * 3600 + 20 * 60,
   convertSeconds: 2 * 3600 + 15 * 60,
   source: "benchmark",
+  service: "piper",
   workers: 4,
   queue: { booksAhead: 0, startsInSeconds: null },
   ...overrides,

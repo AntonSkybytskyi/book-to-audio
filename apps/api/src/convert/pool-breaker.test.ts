@@ -10,24 +10,31 @@ import {
 import { TtsError } from "../tts/engine.js";
 import { DiskFullError } from "../errors.js";
 import { PoolStateStore } from "./pool-state.js";
+import type { WorkerPool } from "./pool.js";
 
 const full = () =>
   stubConverter(async () => {
     throw new DiskFullError({ detail: "12 MB free" });
   });
 
+/** The test engine's workers are paused. */
+const paused = (pool: WorkerPool) => pool.status().services[0]?.state === "paused";
+
 describe("WorkerPool: circuit breaker", () => {
   const h = usePoolHarness();
 
   describe("circuit breaker", () => {
-    it("pauses the pool after three chapters fail in a row", async () => {
+    it("pauses the service's workers after three of its chapters fail in a row", async () => {
       const id = h.addBook(5);
       const p = h.start(failing("The speech engine is broken."));
 
-      await until(() => p.status().state === "paused");
+      await until(() => paused(p));
       await tick();
 
-      expect(p.status()).toMatchObject({ state: "paused", error: "The speech engine is broken." });
+      expect(p.status()).toMatchObject({
+        state: "running", // only the service's workers pause
+        services: [{ id: "fake", state: "paused", error: "The speech engine is broken." }],
+      });
       expect(h.repo.chapters(id).map((c) => c.status)).toEqual([
         "failed",
         "failed",
@@ -69,7 +76,7 @@ describe("WorkerPool: circuit breaker", () => {
       );
 
       await until(() => h.bookStatus(id) === "done_with_errors");
-      expect(h.pool?.status().state).toBe("running");
+      expect(h.pool?.status().services[0]?.state).toBe("running");
     });
 
     it("lets chapters that are already running finish when it trips", async () => {
@@ -88,7 +95,7 @@ describe("WorkerPool: circuit breaker", () => {
       );
 
       // Worker 1 fails chapters 1..3 while worker 2 sits on chapter 4.
-      await until(() => held && p.status().state === "paused");
+      await until(() => held && paused(p));
       h.gates.releaseAll();
 
       await until(() => h.status(id, 4) === "done");
@@ -104,13 +111,13 @@ describe("WorkerPool: circuit breaker", () => {
           return ok(run);
         }),
       );
-      await until(() => p.status().state === "paused");
+      await until(() => paused(p));
       broken = false;
       p.notify();
       await tick();
       expect(h.status(id, 4)).toBe("queued");
 
-      expect(p.resume()).toMatchObject({ state: "running", error: null });
+      expect(p.resume("fake")).toMatchObject({ services: [{ state: "running", error: null }] });
 
       await until(() => h.status(id, 5) === "done");
       expect(h.repo.chapters(id).map((c) => c.status)).toEqual([
@@ -126,12 +133,12 @@ describe("WorkerPool: circuit breaker", () => {
     it("starts counting from zero after a resume", async () => {
       h.addBook(8);
       const p = h.start(failing());
-      await until(() => p.status().state === "paused");
+      await until(() => paused(p));
 
       p.resume();
 
-      await until(() => p.status().state === "paused"); // three more failures, not one
-      expect(new PoolStateStore(h.ctx.db).get().consecutiveFailures).toBe(3);
+      await until(() => paused(p)); // three more failures, not one
+      expect(new PoolStateStore(h.ctx.db).service("fake").consecutiveFailures).toBe(3);
       expect(
         h.repo.chapters(h.repo.list()[0]?.id ?? "").filter((c) => c.status === "failed"),
       ).toHaveLength(6);
@@ -146,14 +153,14 @@ describe("WorkerPool: circuit breaker", () => {
     it("stays paused across a restart and does not claim anything", async () => {
       const id = h.addBook(5);
       const first = h.start(failing("Broken."));
-      await until(() => first.status().state === "paused");
+      await until(() => paused(first));
       await first.stop();
       const converter = stubConverter(ok);
 
       const second = h.start(converter);
       await tick();
 
-      expect(second.status()).toMatchObject({ state: "paused", error: "Broken." });
+      expect(second.status()).toMatchObject({ services: [{ state: "paused", error: "Broken." }] });
       expect(converter.convert).not.toHaveBeenCalled();
       expect(h.status(id, 4)).toBe("queued");
       second.resume();
@@ -172,7 +179,7 @@ describe("WorkerPool: circuit breaker", () => {
 
       await p.stop();
 
-      expect(new PoolStateStore(h.ctx.db).get().consecutiveFailures).toBe(0);
+      expect(new PoolStateStore(h.ctx.db).service("fake").consecutiveFailures).toBe(0);
     });
 
     describe("what counts", () => {
@@ -190,8 +197,8 @@ describe("WorkerPool: circuit breaker", () => {
         await until(() => h.bookStatus(id) === "done_with_errors");
 
         expect(h.repo.chapters(id).map((c) => c.status)).toEqual(Array(6).fill("failed"));
-        expect(p.status()).toMatchObject({ state: "running", error: null });
-        expect(new PoolStateStore(h.ctx.db).get().consecutiveFailures).toBe(0);
+        expect(p.status()).toMatchObject({ services: [{ state: "running", error: null }] });
+        expect(new PoolStateStore(h.ctx.db).service("fake").consecutiveFailures).toBe(0);
       });
 
       it("does not let unreadable text hide an engine that is failing", async () => {
@@ -203,7 +210,7 @@ describe("WorkerPool: circuit breaker", () => {
           }),
         );
 
-        await until(() => p.status().state === "paused");
+        await until(() => paused(p));
 
         // Failures 1, 3 and 5 trip it; the unreadable chapters between them neither add nor reset.
         expect(h.repo.chapters(id).map((c) => c.status)).toEqual([
@@ -214,8 +221,8 @@ describe("WorkerPool: circuit breaker", () => {
           "failed",
           "queued",
         ]);
-        expect(p.status()).toMatchObject({
-          cause: "failures",
+        expect(p.status().services[0]).toMatchObject({
+          state: "paused",
           error: "The speech engine took too long.",
         });
       });
@@ -251,7 +258,7 @@ describe("WorkerPool: circuit breaker", () => {
         });
         expect(h.repo.chapters(id).map((c) => c.status)).toEqual(["queued", "queued", "queued"]);
         expect(h.repo.chapter(id, 1)?.error).toBeNull();
-        expect(new PoolStateStore(h.ctx.db).get().consecutiveFailures).toBe(0);
+        expect(new PoolStateStore(h.ctx.db).service("fake").consecutiveFailures).toBe(0);
       });
 
       it("takes only one chapter while the disk is full, then continues after resume", async () => {
@@ -290,7 +297,7 @@ describe("WorkerPool: circuit breaker", () => {
         await until(() => p.status().state === "paused");
 
         expect(p.status().cause).toBe("disk");
-        expect(new PoolStateStore(h.ctx.db).recordFailure("late")).toBe(false); // already paused
+        new PoolStateStore(h.ctx.db).recordFailure("fake", "late"); // a service's failures leave the pool's pause alone
         expect(p.status().cause).toBe("disk");
       });
     });

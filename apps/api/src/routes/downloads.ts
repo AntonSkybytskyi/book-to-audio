@@ -8,13 +8,13 @@ import type { OutputBuilder } from "../outputs/builder.js";
 import { asciiDownloadName, contentDisposition, downloadFileName } from "../outputs/names.js";
 import { toOutputsView, type OutputsView } from "../outputs/view.js";
 import type { Estimator } from "../speed/estimator.js";
-import type { TtsEngine } from "../tts/engine.js";
+import type { TtsCatalog } from "../tts/catalog.js";
 import { sendError } from "./errors.js";
 
 export interface DownloadRouteDeps {
   repo: BookRepository;
   storage: Storage;
-  engine: TtsEngine;
+  catalog: TtsCatalog;
   outputs: Pick<OutputBuilder, "request" | "filesMissing">;
   estimator: Estimator;
 }
@@ -37,7 +37,7 @@ function notReady(bookDone: boolean, outputs: OutputsView): string {
  * only served while it was built from the book's current audio and the book is done (409 otherwise).
  */
 export function registerDownloadRoutes(api: FastifyInstance, deps: DownloadRouteDeps) {
-  const { repo, storage, engine, outputs, estimator } = deps;
+  const { repo, storage, catalog, outputs, estimator } = deps;
 
   const withBook = (id: string, reply: FastifyReply) => {
     if (!UUID.test(id)) {
@@ -89,6 +89,6 @@ export function registerDownloadRoutes(api: FastifyInstance, deps: DownloadRoute
       return sendError(reply, 409, "conflict", "The downloads are already being built.");
     }
     outputs.request(book.id, { force: true });
-    return loadBookView(repo, engine, estimator, book.id);
+    return loadBookView(repo, catalog, estimator, book.id);
   });
 }

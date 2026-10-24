@@ -93,7 +93,11 @@ describe("estimates in the API", () => {
       const book = await h.upload(await lighthouseBook());
 
       const one = (await h.read(book.id)).estimate!;
-      await h.app.inject({ method: "PATCH", url: "/api/settings", payload: { workers: 2 } });
+      await h.app.inject({
+        method: "PATCH",
+        url: "/api/settings",
+        payload: { workers: { fake: 2 } },
+      });
       const two = (await h.read(book.id)).estimate!;
 
       expect(one.workers).toBe(1);

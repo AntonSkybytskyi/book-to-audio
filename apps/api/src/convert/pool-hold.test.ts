@@ -171,7 +171,7 @@ describe("WorkerPool: holding the pool for the speed test", () => {
       const id = h.addBook(2);
       const pool = h.start(gated(), 2);
       await until(() => h.gates.open.length === 2);
-      pool.setWorkers(1); // the second worker leaves after its chapter
+      h.setWorkers(1); // the second worker leaves after its chapter
       let held = false;
       const waiting = pool.holdWhenIdle().then((release) => {
         held = true;
@@ -244,6 +244,7 @@ describe("WorkerPool: holding the pool for the speed test", () => {
 
       expect(timings).toEqual([
         {
+          engine: "fake",
           voiceId: "voice",
           language: "en",
           preparedChars: 1200,

@@ -36,8 +36,11 @@ const VALUE_CELL =
 const measuredAt = (iso: string) =>
   new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 
-/** The speed test: how fast each voice reads on this computer, and the button to measure again. */
-export function SpeedSection({ workers }: { workers: number }) {
+/**
+ * The speed test: how fast each voice reads, and the button to measure again. `workers` stands for
+ * the worker counts and voices in use; the results are asked for again when it changes.
+ */
+export function SpeedSection({ workers }: { workers: string }) {
   const { data: info, error, setData, refresh } = useBenchmark();
   const [asking, setAsking] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -96,11 +99,14 @@ export function SpeedSection({ workers }: { workers: number }) {
       </p>
 
       {info.rows.length === 0 ? (
-        <p className={LIVE}>No voice is installed, so there is nothing to measure.</p>
+        <p className={LIVE}>No speech service has a voice yet, so there is nothing to measure.</p>
       ) : (
         <>
           <p className={LIVE} id="speed-table-note">
-            Speed of each voice, with {pluralize(info.workers, "worker")}
+            Speed of each voice,{" "}
+            {info.services.length === 1
+              ? `with ${pluralize(info.services[0]?.workers ?? 1, "worker")}`
+              : "with the workers of its speech service"}
           </p>
           <table
             className="w-full border-collapse tabular-nums max-sm:block"
@@ -178,7 +184,17 @@ export function SpeedSection({ workers }: { workers: number }) {
       {!latest && !busy && missing && info.rows.length > 0 && (
         <p className={LIVE}>Until the test has run, estimates are rough guesses and say so.</p>
       )}
-      {results.length > 0 && workersHint(info) && <p className={LIVE}>{workersHint(info)}</p>}
+      {results.length > 0 &&
+        info.services.flatMap((service) => {
+          const hint = workersHint(service, info.services.length > 1);
+          return hint
+            ? [
+                <p key={service.id} className={LIVE}>
+                  {hint}
+                </p>,
+              ]
+            : [];
+        })}
 
       {busy && info.state !== "waiting" && (
         <ProgressBar

@@ -6,6 +6,7 @@ import { audioUrl, regenerateChapter } from "@/ui/entities/book/api";
 import { bookSummary, overallProgress } from "@/ui/entities/book/book-status";
 import { speedTestSecondsLeft } from "@/ui/entities/benchmark/benchmark";
 import { bookTimeLeft } from "@/ui/entities/book/time-left";
+import { pauseFor } from "@/ui/entities/pool/pool";
 import { useBenchmark } from "@/ui/entities/benchmark/use-benchmark";
 import { usePool } from "@/ui/entities/pool/use-pool";
 import { useBook } from "@/ui/entities/book/use-book";
@@ -96,7 +97,7 @@ export function BookView({ id }: { id: string }) {
           <ProgressBar value={overallProgress(book)} label="Overall conversion progress" />
         )}
         <p className="tabular-nums" role="status" aria-live="polite">
-          {bookSummary(book, pool?.state === "paused")}
+          {bookSummary(book, pauseFor(pool, book.estimate?.service))}
         </p>
         {timeLeft && <p className="text-[0.95rem] text-ink-muted tabular-nums">{timeLeft}</p>}
         {book.status === "ready" && (

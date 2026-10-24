@@ -4,6 +4,7 @@ import { openDatabase } from "../db/database.js";
 import { createTestContext, type TestContext } from "../testing/context.js";
 import { ChapterQueue } from "./queue.js";
 import { BookRepository, type NewChapter } from "./repository.js";
+import { LANGUAGES } from "./languages.js";
 
 const chapters = (n: number): NewChapter[] =>
   Array.from({ length: n }, (_, i) => ({
@@ -21,7 +22,7 @@ function finishChapters(
 ) {
   repo.queue(id);
   for (const outcome of outcomes) {
-    const task = queue.claimNext();
+    const task = queue.claimNext(LANGUAGES);
     if (!task) throw new Error("expected a chapter");
     if (outcome === "done") queue.markDone(task, "a.webm", 1);
     else queue.markFailed(task, "x");
@@ -52,7 +53,7 @@ describe("BookRepository and ChapterQueue", () => {
 
   const claim = (id: string) => {
     repo.queue(id);
-    const task = queue.claimNext();
+    const task = queue.claimNext(LANGUAGES);
     if (!task) throw new Error("expected a chapter");
     return task;
   };
@@ -62,7 +63,7 @@ describe("BookRepository and ChapterQueue", () => {
     const id = addBook("A", 1);
     const stale = claim(id);
     expect(queue.resetInterrupted()).toBe(1);
-    const current = queue.claimNext();
+    const current = queue.claimNext(LANGUAGES);
     if (!current) throw new Error("expected the chapter again");
     return { id, stale, current };
   };
@@ -148,19 +149,19 @@ describe("BookRepository and ChapterQueue", () => {
     it("returns nothing for books that are not converting", () => {
       addBook("A");
 
-      expect(queue.claimNext()).toBeNull();
+      expect(queue.claimNext(LANGUAGES)).toBeNull();
     });
 
     it("takes chapters in order and marks them generating", () => {
       const id = addBook("A", 2, "uk");
       repo.queue(id);
 
-      const first = queue.claimNext();
-      const second = queue.claimNext();
+      const first = queue.claimNext(LANGUAGES);
+      const second = queue.claimNext(LANGUAGES);
 
       expect(first).toMatchObject({ bookId: id, position: 1, text: "Text 1.", language: "uk" });
       expect(second).toMatchObject({ position: 2 });
-      expect(queue.claimNext()).toBeNull();
+      expect(queue.claimNext(LANGUAGES)).toBeNull();
       expect(repo.chapters(id).map((c) => c.status)).toEqual(["generating", "generating"]);
     });
 
@@ -173,8 +174,8 @@ describe("BookRepository and ChapterQueue", () => {
         .run(second);
       repo.queue(first);
 
-      expect(queue.claimNext()?.bookId).toBe(first);
-      expect(queue.claimNext()?.bookId).toBe(second);
+      expect(queue.claimNext(LANGUAGES)?.bookId).toBe(first);
+      expect(queue.claimNext(LANGUAGES)?.bookId).toBe(second);
     });
   });
 
@@ -186,7 +187,7 @@ describe("BookRepository and ChapterQueue", () => {
         const queues = [queue, new ChapterQueue(other)];
         const seen: number[] = [];
         for (let turn = 0; ; turn++) {
-          const task = queues[turn % 2]?.claimNext();
+          const task = queues[turn % 2]?.claimNext(LANGUAGES);
           if (!task) break;
           seen.push(task.id);
         }
@@ -211,7 +212,7 @@ describe("BookRepository and ChapterQueue", () => {
       repo.queue(id);
       ctx.db.prepare("UPDATE books SET status = 'paused' WHERE id = ?").run(id);
 
-      expect(queue.claimNext()).toBeNull();
+      expect(queue.claimNext(LANGUAGES)).toBeNull();
     });
   });
 
@@ -219,8 +220,8 @@ describe("BookRepository and ChapterQueue", () => {
     it("records chunks, completion and failure", () => {
       const id = addBook("A", 2);
       repo.queue(id);
-      const one = queue.claimNext();
-      const two = queue.claimNext();
+      const one = queue.claimNext(LANGUAGES);
+      const two = queue.claimNext(LANGUAGES);
       if (!one || !two) throw new Error("expected two chapters");
 
       expect(queue.recordChunks(one, 2, 5)).toBe(true);
@@ -258,7 +259,7 @@ describe("BookRepository and ChapterQueue", () => {
       expect(queue.requeue(task)).toBe(true);
 
       expect(repo.chapter(id, 1)).toMatchObject({ status: "queued", chunksDone: 3, chunkCount: 8 });
-      expect(queue.claimNext()).toMatchObject({ claim: 2, chunksDone: 3, chunkCount: 8 });
+      expect(queue.claimNext(LANGUAGES)).toMatchObject({ claim: 2, chunksDone: 3, chunkCount: 8 });
     });
 
     it("counts each claim of a chapter", () => {
@@ -267,7 +268,7 @@ describe("BookRepository and ChapterQueue", () => {
       queue.requeue(first);
 
       expect(first.claim).toBe(1);
-      expect(queue.claimNext()?.claim).toBe(2);
+      expect(queue.claimNext(LANGUAGES)?.claim).toBe(2);
     });
 
     describe("a stale claim", () => {
@@ -376,7 +377,7 @@ describe("BookRepository and ChapterQueue", () => {
     it("puts generating chapters back in the queue with their chunks", () => {
       const id = addBook("A", 2);
       repo.queue(id);
-      const task = queue.claimNext();
+      const task = queue.claimNext(LANGUAGES);
       if (!task) throw new Error("expected a chapter");
       queue.recordChunks(task, 2, 4);
 
@@ -386,7 +387,11 @@ describe("BookRepository and ChapterQueue", () => {
         ["queued", 0.5, 2],
         ["queued", 0, 0],
       ]);
-      expect(queue.claimNext()).toMatchObject({ position: 1, chunksDone: 2, chunkCount: 4 });
+      expect(queue.claimNext(LANGUAGES)).toMatchObject({
+        position: 1,
+        chunksDone: 2,
+        chunkCount: 4,
+      });
     });
   });
 });

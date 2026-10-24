@@ -38,13 +38,15 @@ import { SpeedCalibration } from "./speed/calibration.js";
 import { Estimator } from "./speed/estimator.js";
 import { LearningRepository } from "./speed/learning.js";
 import { API_SECURITY_HEADERS, registerHostAndOriginGuard } from "./security.js";
-import type { TtsEngine } from "./tts/engine.js";
+import type { TtsCatalog } from "./tts/catalog.js";
+import { benchmarkWorkersOf, workersOf } from "./convert/worker-target.js";
 
 export interface ServerDeps {
   db: Database.Database;
   logger?: FastifyServerOptions["logger"];
   storage: Storage;
-  engine: TtsEngine;
+  /** The configured TTS services and the voice of each language. */
+  catalog: TtsCatalog;
   /** Upload size limit in bytes, enforced while the file streams in. */
   maxUploadBytes: number;
   /** Where the queue and pool publish live updates; `GET /api/events` streams them. */
@@ -83,7 +85,7 @@ export function buildServer({
   db,
   logger = false,
   storage,
-  engine,
+  catalog,
   maxUploadBytes,
   bus,
   pool,
@@ -96,7 +98,7 @@ export function buildServer({
   counter = new PreparedCounter({
     repo: new CountRepository(db),
     prepare: prepareText,
-    maxChars: engine.maxInputChars,
+    maxChars: (language) => catalog.maxCharsFor(language),
     bus,
   }),
   parseEpub = createWorkerParser(),
@@ -124,10 +126,16 @@ export function buildServer({
   });
 
   const estimator = new Estimator({
-    engine,
+    catalog,
     calibration: new SpeedCalibration(new BenchmarkRepository(db), new LearningRepository(db)),
-    workers: () => settings.workers(),
-    poolPaused: () => pool.status().state === "paused",
+    workers: workersOf(catalog, settings),
+    poolPaused: (service) => {
+      const status = pool.status();
+      return (
+        status.state === "paused" ||
+        status.services.some((s) => s.id === service && s.state === "paused")
+      );
+    },
     speedTestSeconds: () =>
       benchmark && pool.status().held ? benchmark.runner.expectedRemainingSeconds() : null,
   });
@@ -150,25 +158,25 @@ export function buildServer({
       await api.register(multipart, {
         limits: { fileSize: maxUploadBytes, files: 1, fields: 5, parts: 6 },
       });
-      registerUpload(api, { repo, storage, engine, bus, parseEpub, estimator, counter });
-      registerBookRoutes(api, { repo, storage, engine, bus, pool, estimator, counter });
+      registerUpload(api, { repo, storage, catalog, bus, parseEpub, estimator, counter });
+      registerBookRoutes(api, { repo, storage, catalog, bus, pool, estimator, counter });
       registerEstimateRoute(api, {
         repo,
         counts: new CountRepository(db),
-        engine,
+        catalog,
         estimator,
         prepareText: counter.prepare,
       });
-      registerBookControlRoutes(api, { repo, engine, controls, estimator });
-      registerDownloadRoutes(api, { repo, storage, engine, outputs, estimator });
+      registerBookControlRoutes(api, { repo, catalog, controls, estimator });
+      registerDownloadRoutes(api, { repo, storage, catalog, outputs, estimator });
       registerPoolRoutes(api, pool);
-      registerSettingsRoutes(api, { settings, pool });
+      registerSettingsRoutes(api, { settings, catalog, pool });
       if (benchmark) {
         registerBenchmarkRoutes(api, {
           runner: benchmark.runner,
           repo: new BenchmarkRepository(db),
-          engine,
-          settings,
+          catalog,
+          workers: benchmarkWorkersOf(catalog, settings),
           machine: benchmark.machine,
         });
       }

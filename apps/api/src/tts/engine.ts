@@ -1,3 +1,4 @@
+import type { TtsServiceErrorCode } from "@book-to-audio/contracts";
 import { UserFacingError } from "../errors.js";
 
 export interface Voice {
@@ -31,20 +32,24 @@ export interface TtsSession {
 
 export interface TtsEngine {
   readonly id: string;
-  readonly kind: "local" | "cloud";
   /** Longest text, in characters, that one `synthesize` call accepts. */
   readonly maxInputChars: number;
+  /** How many sessions the engine serves at once; more wait their turn. */
+  readonly concurrency: number;
+  /** The engine said which voices it has at least once, so `voices()` is not just empty for want of an answer. */
+  readonly ready: boolean;
+  /** The engine answered the last time it was asked. */
+  readonly reachable: boolean;
   voices(): Voice[];
   open(voiceId: string): Promise<TtsSession>;
 }
 
-export type TtsErrorCode =
-  | "voice_not_found"
-  | "engine_unavailable" // the binary or service could not be started
-  | "synthesis_failed"
-  | "timeout"
-  | "bad_input" // this text cannot be read aloud; says nothing about the engine
-  | "aborted";
+/**
+ * The service's codes (`bad_input`: this text cannot be read aloud, says nothing about the engine),
+ * plus two of the app's own: `aborted`, the app cancelled the work; `unreachable`, the service did
+ * not answer at all, which says nothing about the text either.
+ */
+export type TtsErrorCode = TtsServiceErrorCode | "aborted" | "unreachable";
 
 export class TtsError extends UserFacingError {
   readonly code: TtsErrorCode;

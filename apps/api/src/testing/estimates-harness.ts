@@ -71,13 +71,13 @@ export function useEstimatesHarness(): EstimatesHarness {
     counter = new PreparedCounter({
       repo: new CountRepository(ctx.db),
       prepare: overrides.prepareText ?? prepareInThread,
-      maxChars: ctx.engine.maxInputChars,
+      maxChars: () => ctx.engine.maxInputChars,
       bus: ctx.bus,
     });
     app = buildServer({
       db: ctx.db,
       storage: ctx.storage,
-      engine: ctx.engine,
+      catalog: ctx.catalog,
       maxUploadBytes: 5 * 1024 * 1024,
       parseEpub: ctx.parseEpub,
       bus: ctx.bus,
@@ -97,7 +97,7 @@ export function useEstimatesHarness(): EstimatesHarness {
       ],
     });
     build();
-    ctx.settings.setWorkers(1);
+    ctx.settings.setWorkersOverride(ctx.engine.id, 1);
   });
 
   afterEach(async () => {

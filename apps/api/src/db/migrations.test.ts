@@ -28,7 +28,7 @@ describe("migrations 3 and 4 (chapter pool)", () => {
        VALUES ('b', 1, 'C', 'text', 4, 1, 'done', 1)`,
     ).run();
 
-    expect(runMigrations(db, migrations)).toEqual([3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(runMigrations(db, migrations)).toEqual([3, 4, 5, 6, 7, 8, 9, 10, 11]);
 
     expect(
       db.prepare("SELECT status, progress, chunk_count, chunks_done, claim FROM chapters").get(),
@@ -82,7 +82,7 @@ describe("migration 5 (book controls)", () => {
        VALUES ('b', 1, 'C', 'text', 4, 1, 'done', 'audio/b/01.webm')`,
     ).run();
 
-    expect(runMigrations(db, migrations)).toEqual([5, 6, 7, 8, 9, 10]);
+    expect(runMigrations(db, migrations)).toEqual([5, 6, 7, 8, 9, 10, 11]);
 
     expect(db.prepare("SELECT audio_version, regen_error, audio_path FROM chapters").get()).toEqual(
       { audio_version: 0, regen_error: null, audio_path: "audio/b/01.webm" },
@@ -244,7 +244,12 @@ describe("migration 9 (benchmark load)", () => {
        VALUES ('piper', 'v', 'en', 60, 0.1, NULL, 1, '[]', 1, 1, 8, 'cpu', 3, 'x')`,
     ).run();
 
-    expect(runMigrations(db, migrations)).toEqual([9, 10]);
+    expect(
+      runMigrations(
+        db,
+        migrations.filter((m) => m.id <= 10),
+      ),
+    ).toEqual([9, 10]);
 
     expect(
       db
@@ -268,11 +273,78 @@ describe("migration 10 (approximate counts)", () => {
        VALUES ('b', 1, 'C', 'text', 4, 1, 4)`,
     ).run();
 
-    expect(runMigrations(db, migrations)).toEqual([10]);
+    expect(runMigrations(db, migrations)).toEqual([10, 11]);
 
     expect(db.prepare("SELECT prepared_chars, prepared_approx FROM chapters").get()).toEqual({
       prepared_chars: 4,
       prepared_approx: 0,
+    });
+    db.close();
+  });
+});
+
+describe("migration 11 (TTS services)", () => {
+  it("forgets speeds measured under the old voice ids and the global worker count, and adds the service pause", () => {
+    const db = new Database(":memory:");
+    runMigrations(
+      db,
+      migrations.filter((m) => m.id <= 10),
+    );
+    db.prepare(
+      `INSERT INTO benchmark_results (engine, voice_id, language, seconds_per_kchar, rtf, encode_factor,
+         model_load_ms, throughput, sample_chars, sample_audio_seconds, cpu_count, cpu_model, text_version, measured_at)
+       VALUES ('piper', 'v', 'en', 60, 0.1, NULL, 1, '[]', 1, 1, 8, 'cpu', 3, 'x')`,
+    ).run();
+    db.prepare(
+      "INSERT INTO speed_learning (engine, voice_id, seconds_per_kchar, slowdown, samples) VALUES ('piper', 'v', 60, 1, 1)",
+    ).run();
+    db.prepare(
+      "INSERT INTO settings (key, value) VALUES ('workers', '3'), ('shown_languages', '[\"en\"]')",
+    ).run();
+    db.prepare(
+      "UPDATE pool_state SET state = 'paused', error = 'Broken.', cause = 'failures'",
+    ).run();
+
+    expect(runMigrations(db, migrations)).toEqual([11]);
+
+    expect(db.prepare("SELECT COUNT(*) FROM benchmark_results").pluck().get()).toBe(0);
+    expect(db.prepare("SELECT COUNT(*) FROM speed_learning").pluck().get()).toBe(0);
+    expect(db.prepare("SELECT key FROM settings").pluck().all()).toEqual(["shown_languages"]);
+    expect(db.prepare("SELECT state, error, cause FROM pool_state").get()).toEqual({
+      state: "running",
+      error: null,
+      cause: null,
+    });
+    db.prepare("INSERT INTO service_state (service) VALUES ('piper')").run();
+    expect(
+      db.prepare("SELECT state, error, consecutive_failures FROM service_state").get(),
+    ).toEqual({
+      state: "running",
+      error: null,
+      consecutive_failures: 0,
+    });
+    expect(() =>
+      db.prepare("INSERT INTO service_state (service, state) VALUES ('x', 'stopped')").run(),
+    ).toThrow(/CHECK/);
+    db.close();
+  });
+
+  it("keeps a pause for a full disk", () => {
+    const db = new Database(":memory:");
+    runMigrations(
+      db,
+      migrations.filter((m) => m.id <= 10),
+    );
+    db.prepare(
+      "UPDATE pool_state SET state = 'paused', error = 'The disk is full.', cause = 'disk'",
+    ).run();
+
+    expect(runMigrations(db, migrations)).toEqual([11]);
+
+    expect(db.prepare("SELECT state, error, cause FROM pool_state").get()).toEqual({
+      state: "paused",
+      error: "The disk is full.",
+      cause: "disk",
     });
     db.close();
   });

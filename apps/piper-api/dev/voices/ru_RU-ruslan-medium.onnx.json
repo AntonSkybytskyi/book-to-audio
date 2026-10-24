@@ -1,0 +1,5 @@
+{
+  "audio": { "sample_rate": 22050 },
+  "language": { "family": "ru", "code": "ru_RU" },
+  "num_speakers": 1
+}

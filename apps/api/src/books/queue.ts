@@ -61,12 +61,13 @@ export class ChapterQueue {
   }
 
   /**
-   * Takes the next queued chapter: earliest queued book first, then by position.
-   * Only books that are `converting` are served, so a book that is paused (or being
+   * Takes the next queued chapter in one of `languages` (those read by the caller's TTS service):
+   * earliest queued book first, then by position. Only books that are `converting` are served, so a book that is paused (or being
    * deleted) is left alone. One write transaction, so two workers can never get
    * the same chapter, even from separate connections.
    */
-  claimNext(): ClaimedChapter | null {
+  claimNext(languages: readonly string[]): ClaimedChapter | null {
+    if (languages.length === 0) return null;
     return this.db
       .transaction((): ClaimedChapter | null => {
         const row = this.db
@@ -75,9 +76,10 @@ export class ChapterQueue {
                     c.chunk_count, c.chunks_done
              FROM chapters c JOIN books b ON b.id = c.book_id
              WHERE c.status = 'queued' AND b.status = 'converting'
+               AND b.language IN (SELECT value FROM json_each(?))
              ORDER BY b.queued_at, b.rowid, c.position LIMIT 1`,
           )
-          .get() as ClaimRow | undefined;
+          .get(JSON.stringify(languages)) as ClaimRow | undefined;
         if (!row) return null;
         const claim = row.claim + 1;
         this.db
@@ -101,16 +103,18 @@ export class ChapterQueue {
       .immediate();
   }
 
-  /** Whether a worker could take a chapter right now. */
-  hasClaimable(): boolean {
+  /** Whether a worker for one of these languages could take a chapter right now. */
+  hasClaimable(languages: readonly string[]): boolean {
+    if (languages.length === 0) return false;
     return (
       this.db
         .prepare(
           `SELECT 1 FROM chapters c JOIN books b ON b.id = c.book_id
-           WHERE c.status = 'queued' AND b.status = 'converting' LIMIT 1`,
+           WHERE c.status = 'queued' AND b.status = 'converting'
+             AND b.language IN (SELECT value FROM json_each(?)) LIMIT 1`,
         )
         .pluck()
-        .get() === 1
+        .get(JSON.stringify(languages)) === 1
     );
   }
 

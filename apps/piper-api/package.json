@@ -1,0 +1,22 @@
+{
+  "name": "@book-to-audio/piper-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TTS service that reads text aloud with Piper, behind the TTS service API",
+  "type": "module",
+  "scripts": {
+    "dev": "PORT=${PIPER_PORT:-3003} FAKE_PIPER_TONE=${FAKE_PIPER_TONE:-1} PIPER_BIN=${PIPER_BIN:-dev/fake-piper.mjs} PIPER_VOICES_DIR=${PIPER_VOICES_DIR:-dev/voices} tsx scripts/dev.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@book-to-audio/contracts": "workspace:*",
+    "fastify": "5.12.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "tsx": "^4.23.15",
+    "typescript": "6.0.3"
+  }
+}

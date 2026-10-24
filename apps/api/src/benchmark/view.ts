@@ -3,13 +3,14 @@ import {
   conversionSeconds,
   suggestedWorkers,
   type BenchmarkRowView,
+  type BenchmarkServiceView,
   type BenchmarkView,
   type ResultView,
 } from "@book-to-audio/contracts";
 import { LANGUAGES } from "../books/languages.js";
 import { benchmarkModel } from "../speed/calibration.js";
 import { TEXT_PROCESSING_VERSION } from "../text/index.js";
-import type { TtsEngine } from "../tts/engine.js";
+import type { TtsCatalog } from "../tts/catalog.js";
 import { benchmarkVoices } from "./runner.js";
 import {
   wasBusy,
@@ -27,11 +28,12 @@ const NOVEL_CHAPTERS = 30;
 const CHARS_PER_WORD: Readonly<Record<string, number>> = { en: 5.8, uk: 7.3, ru: 7.1 };
 
 export interface BenchmarkViewDeps {
-  engine: TtsEngine;
+  catalog: TtsCatalog;
   repo: BenchmarkRepository;
   status: BenchmarkStatus;
   machine: MachineInfo;
-  workers: { current: number; max: number };
+  /** A TTS service's worker count in use, and the most sessions worth comparing on it. */
+  workers: (service: string) => { current: number; max: number };
   needsRun: boolean;
 }
 
@@ -63,34 +65,44 @@ function toResultView(result: StoredBenchmark, machine: MachineInfo, workers: nu
 
 /** The Speed section of the settings page: one row per voice the app reads with. */
 export function toBenchmarkView(deps: BenchmarkViewDeps): BenchmarkView {
-  const { engine, repo, machine, workers } = deps;
-  const stored = new Map(repo.all(engine.id).map((row) => [row.voiceId, row]));
-  const rows = benchmarkVoices(engine).map((voice): BenchmarkRowView => {
-    const row = stored.get(voice.id);
+  const { catalog, repo, machine, workers } = deps;
+  const rows = benchmarkVoices(catalog).map((voice): BenchmarkRowView => {
+    const row = repo.get(voice.engine, voice.id);
     return {
       language: voice.language,
       voiceId: voice.id,
-      result: row ? toResultView(row, machine, workers.current) : null,
+      service: voice.engine,
+      result: row ? toResultView(row, machine, workers(voice.engine).current) : null,
     };
   });
-  // Added up over the voices so one odd measurement does not decide.
-  const counts = new Set(rows.flatMap((row) => row.result?.throughput.map((p) => p.workers) ?? []));
-  const combined = [...counts]
-    .toSorted((a, b) => a - b)
-    .map((n) => ({
-      workers: n,
-      audioPerSecond: rows.reduce(
-        (sum, row) =>
-          sum + (row.result?.throughput.find((p) => p.workers === n)?.audioPerSecond ?? 0),
-        0,
-      ),
-    }));
+  const services = [...new Set(rows.map((row) => row.service))].map((id): BenchmarkServiceView => {
+    const own = rows.filter((row) => row.service === id);
+    // Added up over the service's voices so one odd measurement does not decide.
+    const counts = new Set(
+      own.flatMap((row) => row.result?.throughput.map((p) => p.workers) ?? []),
+    );
+    const combined = [...counts]
+      .toSorted((a, b) => a - b)
+      .map((n) => ({
+        workers: n,
+        audioPerSecond: own.reduce(
+          (sum, row) =>
+            sum + (row.result?.throughput.find((p) => p.workers === n)?.audioPerSecond ?? 0),
+          0,
+        ),
+      }));
+    const { current, max } = workers(id);
+    return {
+      id,
+      workers: current,
+      maxWorkers: max,
+      suggestedWorkers: combined.length > 0 ? suggestedWorkers(combined) : null,
+    };
+  });
   return {
     ...deps.status,
     rows: LANGUAGES.flatMap((language) => rows.filter((row) => row.language === language)),
-    workers: workers.current,
-    maxWorkers: workers.max,
-    suggestedWorkers: combined.length > 0 ? suggestedWorkers(combined) : null,
+    services,
     machine,
     needsRun: deps.needsRun,
   };
