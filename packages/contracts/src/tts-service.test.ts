@@ -5,6 +5,7 @@ import {
   TTS_ERROR_CODES,
   TTS_ERROR_STATUS,
   type TtsServiceVoice,
+  type TtsStoppingResponse,
   type TtsSynthesizeRequest,
   type TtsVoicesResponse,
 } from "./tts-service.js";
@@ -46,6 +47,18 @@ describe("the TTS service OpenAPI file", () => {
     );
 
     expect(documented).toEqual(TTS_ERROR_STATUS);
+  });
+
+  it("documents the 503 of a service that is stopping", () => {
+    const stopping = { status: "stopping" } satisfies TtsStoppingResponse;
+    const response = spec.paths["/synthesize"]?.post?.responses["503"] as
+      | { content: Record<string, { schema: { oneOf?: { $ref: string }[] } }> }
+      | undefined;
+
+    expect(response?.content["application/json"]?.schema.oneOf).toContainEqual({
+      $ref: "#/components/schemas/TtsStoppingResponse",
+    });
+    expect(keys(schema("TtsStoppingResponse").properties ?? {})).toEqual(keys(stopping));
   });
 
   it("names the same fields as the types", () => {

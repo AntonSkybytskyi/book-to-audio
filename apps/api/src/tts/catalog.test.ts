@@ -28,6 +28,7 @@ class Remote extends FakeEngine {
   ready = false;
   override reachable = false;
   answers = true;
+  lastError: { message: string; detail?: string } | undefined;
   refresh = vi.fn<() => Promise<boolean>>(async () => {
     const before = this.reachable;
     this.reachable = this.answers;
@@ -112,6 +113,50 @@ describe("TtsCatalog", () => {
 
     expect(remote.refresh).toHaveBeenCalledTimes(3);
     expect(changed).toHaveBeenCalledTimes(2); // answered, then stopped answering
+  });
+
+  it("logs why a service does not answer, once for each reason", async () => {
+    const remote = new Remote({ id: "remote", voices: [voice("remote:uk", "uk")] });
+    remote.answers = false;
+    remote.lastError = { message: "Not reachable.", detail: "GET /voices: ECONNREFUSED" };
+    const logger = {
+      info: vi.fn<(m: string) => void>(),
+      warn: vi.fn<(context: object, m: string) => void>(),
+    };
+    const catalog = new TtsCatalog([remote], { logger });
+
+    await catalog.refresh();
+    await catalog.refresh();
+    remote.lastError = { message: "Failed.", detail: "HTTP 404" };
+    await catalog.refresh();
+    remote.answers = true;
+    await catalog.refresh();
+    await catalog.refresh();
+
+    expect(logger.warn.mock.calls).toEqual([
+      [{ detail: "GET /voices: ECONNREFUSED" }, 'TTS service "remote" does not answer'],
+      [{ detail: "HTTP 404" }, 'TTS service "remote" does not answer'],
+    ]);
+    expect(logger.info.mock.calls).toEqual([['TTS service "remote" answers, 1 voices']]);
+  });
+
+  it("logs once when a chosen voice is gone and another voice reads the language", async () => {
+    const remote = new Remote({ id: "remote", voices: [voice("remote:uk", "uk")] });
+    const logger = { info: vi.fn<(m: string) => void>() };
+    const catalog = new TtsCatalog([piper(), remote], {
+      logger,
+      chosenVoice: (l) => (l === "uk" ? "remote:gone" : undefined),
+    });
+
+    await catalog.refresh();
+    remote.answers = false;
+    await catalog.refresh();
+
+    expect(logger.info.mock.calls.filter(([m]) => m.includes("chosen"))).toEqual([
+      [
+        'the chosen voice "remote:gone" for uk is not available, piper:uk reads it until it is back',
+      ],
+    ]);
   });
 
   it("keeps polling when a listener fails, and asks a service again soon when told it went away", async () => {

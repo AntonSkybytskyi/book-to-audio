@@ -91,7 +91,7 @@ export class PiperSession {
           detail: `"${options.bin}" was not found`,
         });
       }
-      throw new TtsError("synthesis_failed", "The speech engine could not be started.", {
+      throw new TtsError("engine_unavailable", "The speech engine could not be started.", {
         cause: error,
         detail: (error as Error).message,
       });

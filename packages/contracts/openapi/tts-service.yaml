@@ -91,11 +91,17 @@ paths:
               schema:
                 $ref: "#/components/schemas/TtsServiceError"
         "503":
-          description: "`engine_unavailable`: the engine could not be started."
+          description: >-
+            `engine_unavailable`: the engine is not installed or could not be started. A 503 without
+            this error body, such as `{"status": "stopping"}` from a service that is shutting down or
+            an empty one from a proxy, means the service went away: clients try again later and do
+            not count it against the text.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/TtsServiceError"
+                oneOf:
+                  - $ref: "#/components/schemas/TtsServiceError"
+                  - $ref: "#/components/schemas/TtsStoppingResponse"
         "504":
           description: "`timeout`: the engine took too long. Time spent waiting in the queue does not count."
           content:
@@ -156,6 +162,12 @@ components:
           description: >-
             How many `POST /synthesize` requests the service handles at once. More wait in its
             queue. The app runs this many workers for the service unless the owner sets another number.
+    TtsStoppingResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          const: stopping
     TtsSynthesizeRequest:
       type: object
       required: [voice, text]

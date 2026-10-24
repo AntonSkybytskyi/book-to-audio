@@ -163,7 +163,7 @@ TypeScript end to end.
 - **Database:** SQLite through `better-sqlite3`, with numbered migrations applied at startup.
 - **Workers:** a scheduler in the backend process takes chapter tasks from the global pool and sends their text to the TTS services, with a group of workers per service (section 9).
 - **Parsing:** an EPUB library or an in-house parser (decided in the M1 parsing ticket), and `pdfjs-dist` for PDF text and outline.
-- **TTS:** TTS services behind one HTTP API. `piper-api` keeps a warm Piper process per voice, with the binary and voice models in its own Docker image.
+- **TTS:** TTS services behind one HTTP API. `piper-api` keeps Piper processes warm, at most `PIPER_CONCURRENCY` across all voices (several can share one voice), with the binary and voice models in its own Docker image.
 - **Audio:** ffmpeg for encoding, joining chunks and writing chapters and tags.
 - **Packaging:** one Docker image each for nginx, the web app, the core and `piper-api`, run by `docker-compose.yml`; the data volume belongs to the core.
 

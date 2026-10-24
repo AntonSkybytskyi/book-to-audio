@@ -1,6 +1,7 @@
 import http from "node:http";
 import https from "node:https";
 import {
+  MAX_WORKERS,
   TTS_ERROR_CODES,
   TTS_WAV_CONTENT_TYPE,
   type TtsServiceErrorCode,
@@ -14,7 +15,7 @@ import { decodeWav } from "./wav.js";
 export interface HttpTtsEngineOptions {
   /** The service's name in `TTS_SERVICES`; it goes in front of every voice id. */
   id: string;
-  /** For example `http://piper-api:5000`. */
+  /** For example `http://piper-api:5000`; a path in it is kept, so `/tts` asks `/tts/voices`. */
   baseUrl: string;
   /** Longest wait for one `POST /synthesize`, time in the service's queue included. */
   requestTimeoutMs?: number;
@@ -66,6 +67,8 @@ export class HttpTtsEngine implements TtsEngine {
   concurrency = 1;
   ready = false;
   reachable = false;
+  /** Why the service did not answer the last time, until it answers again. */
+  lastError: TtsError | undefined;
   private voiceList: Voice[] = [];
   private readonly baseUrl: URL;
   private readonly agent: http.Agent;
@@ -95,32 +98,34 @@ export class HttpTtsEngine implements TtsEngine {
    * before are kept, so chapters waiting for them resume when it is back. True when anything changed.
    */
   async refresh(): Promise<boolean> {
-    const before = JSON.stringify([
-      this.voiceList,
-      this.maxInputChars,
-      this.concurrency,
-      this.reachable,
-    ]);
+    const before = this.snapshot();
+    let answer: TtsVoicesResponse;
     try {
       const response = await this.request("GET", "/voices", undefined, {
         timeoutMs: this.options.voicesTimeoutMs,
         retryDelaysMs: [],
       });
       if (response.status !== 200) throw this.errorFrom(response);
-      const answer = parseVoices(response.body);
-      this.voiceList = this.qualify(answer.voices);
-      this.maxInputChars = answer.maxInputChars;
-      this.concurrency = answer.concurrency;
-      this.ready = true;
-      this.reachable = true;
+      answer = parseVoices(response.body);
     } catch (error) {
-      this.reachable = false;
-      if (!(error instanceof TtsError)) throw error;
+      if (!(error instanceof TtsError)) {
+        this.reachable = false;
+        throw error;
+      }
+      this.markDown(error);
+      return before !== this.snapshot();
     }
-    return (
-      before !==
-      JSON.stringify([this.voiceList, this.maxInputChars, this.concurrency, this.reachable])
-    );
+    // Read now, not before the request: a chapter may have found the service gone meanwhile, and
+    // its workers only come back when this answer counts as a change.
+    const wasReachable = this.reachable;
+    this.voiceList = this.qualify(answer.voices);
+    this.maxInputChars = answer.maxInputChars;
+    // The app never runs more workers for one service than the settings accept.
+    this.concurrency = Math.min(answer.concurrency, MAX_WORKERS);
+    this.ready = true;
+    this.reachable = true;
+    this.lastError = undefined;
+    return !wasReachable || before !== this.snapshot();
   }
 
   async open(voiceId: string): Promise<TtsSession> {
@@ -178,7 +183,7 @@ export class HttpTtsEngine implements TtsEngine {
   ): Promise<Response> {
     const deadline = AbortSignal.timeout(timeoutMs);
     const combined = signal ? AbortSignal.any([signal, deadline]) : deadline;
-    const url = new URL(path, this.baseUrl);
+    const url = this.urlOf(path);
     for (let attempt = 0; ; attempt++) {
       try {
         return await this.send(method, url, body, combined);
@@ -194,11 +199,12 @@ export class HttpTtsEngine implements TtsEngine {
         if (!(error instanceof ConnectionError)) throw error;
         const delay = retryDelaysMs[attempt];
         if (delay === undefined) {
-          this.reachable = false;
-          throw new TtsError("unreachable", this.unreachableMessage(), {
-            cause: error,
-            detail: `${method} ${url.href}: ${error.code} after ${attempt + 1} attempts`,
-          });
+          throw this.markDown(
+            new TtsError("unreachable", this.unreachableMessage(), {
+              cause: error,
+              detail: `${method} ${url.href}: ${error.code} after ${attempt + 1} attempts`,
+            }),
+          );
         }
         await sleep(delay, combined);
       }
@@ -310,14 +316,30 @@ export class HttpTtsEngine implements TtsEngine {
     }
     if ([502, 503, 504].includes(response.status)) {
       // A proxy in front of the service, or a service that is stopping: it is not there to read.
-      this.reachable = false;
-      return new TtsError("unreachable", this.unreachableMessage(), { detail });
+      return this.markDown(new TtsError("unreachable", this.unreachableMessage(), { detail }));
     }
     return new TtsError(
       "synthesis_failed",
       `The speech service "${this.id}" failed on this text.`,
       { detail },
     );
+  }
+
+  /** The base URL's path and query kept, which `new URL(path, base)` would drop. */
+  private urlOf(path: string): URL {
+    const url = new URL(this.baseUrl);
+    url.pathname = `${url.pathname.replace(/\/+$/, "")}${path}`;
+    return url;
+  }
+
+  private markDown(error: TtsError): TtsError {
+    this.reachable = false;
+    this.lastError = error;
+    return error;
+  }
+
+  private snapshot(): string {
+    return JSON.stringify([this.voiceList, this.maxInputChars, this.concurrency, this.reachable]);
   }
 
   private unreachableMessage(): string {

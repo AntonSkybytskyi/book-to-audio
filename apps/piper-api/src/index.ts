@@ -12,6 +12,8 @@ async function main() {
     scratchDir: config.scratchDir,
     timeoutMs: config.timeoutMs,
     startupGraceMs: config.startupGraceMs,
+    // `app` is created below; the voices are first read once it exists.
+    logger: { warn: (message) => app.log.warn(message) },
   });
   engine.removeLeftovers();
   const pool = new SynthesisPool({

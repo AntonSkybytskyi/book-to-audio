@@ -44,7 +44,7 @@ Settings of core come from environment variables (in Docker, set them on the `co
 | `PORT`               | `3000`                | Port to listen on                                                                              |
 | `DATA_DIR`           | `./data`              | Books, audio and `app.db`                                                                      |
 | `MAX_UPLOAD_MB`      | `200`                 | Largest accepted upload. nginx takes 1 MB more, so core's own limit answers first             |
-| `TTS_SERVICES`       | — (required)          | The TTS services as `name=url`, comma separated, for example `piper=http://piper-api:5000`. Set in `docker-compose.yml` and by `pnpm dev` |
+| `TTS_SERVICES`       | — (required)          | The TTS services as `name=url`, comma separated, for example `piper=http://piper-api:5000`. A path in the url is kept (`http://host/tts` asks `http://host/tts/voices`). Set in `docker-compose.yml` and by `pnpm dev` |
 | `TTS_REQUEST_TIMEOUT_MS` | `600000`          | Longest wait for one piece of text from a TTS service, its queue included                      |
 | `FFMPEG_BIN`         | `ffmpeg`              | ffmpeg executable                                                                              |
 | `FFPROBE_BIN`        | `ffprobe`             | ffprobe executable (measures chapter files before the M4B is built)                            |
@@ -58,7 +58,7 @@ Settings of piper-api (set them on the `piper-api` service). `PIPER_MEM_LIMIT` (
 | Variable                 | Default               | Meaning                                                                                  |
 | ------------------------ | --------------------- | ---------------------------------------------------------------------------------------- |
 | `PORT`                   | `5000`                | Port to listen on (`HOST` as for core; `0.0.0.0` in the image)                           |
-| `PIPER_CONCURRENCY`      | half the CPU cores    | Texts read at once, which is also the most Piper processes alive. Core runs this many workers for the service unless the Settings page says otherwise |
+| `PIPER_CONCURRENCY`      | half the CPU cores    | Texts read at once, at most 64, which is also the most Piper processes alive. Core runs this many workers for the service unless the Settings page says otherwise |
 | `PIPER_BIN`              | `piper`               | Piper executable, or a script that `exec`s it; its process group is killed on a timeout  |
 | `PIPER_VOICES_DIR`       | `/opt/piper-voices`   | Directory with Piper `.onnx` voices and their `.onnx.json` files (set in the image)      |
 | `PIPER_TIMEOUT_MS`       | `120000`              | Longest wait for one text, not counting time in the queue                                |

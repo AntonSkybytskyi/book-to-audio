@@ -1,5 +1,6 @@
 import os from "node:os";
 import path from "node:path";
+import { MAX_WORKERS } from "@book-to-audio/contracts";
 
 export interface Config {
   host: string;
@@ -34,9 +35,10 @@ export function loadConfig(
     concurrency: parseInteger(
       "PIPER_CONCURRENCY",
       env.PIPER_CONCURRENCY,
-      Math.max(1, Math.floor(cpus / 2)),
+      Math.min(MAX_WORKERS, Math.max(1, Math.floor(cpus / 2))),
       1,
-      256,
+      // More is never used: the app runs at most this many workers for one service.
+      MAX_WORKERS,
     ),
     timeoutMs: parseInteger("PIPER_TIMEOUT_MS", env.PIPER_TIMEOUT_MS, 120_000, 1000, 3_600_000),
     startupGraceMs: parseInteger(

@@ -93,7 +93,7 @@ The -32% row is the honest weak spot: the benchmark was taken at a lighter load 
 
 It is a statement about this machine: another computer gets its own number from the same test, and the app never promises a time, it shows its estimate before each conversion. A machine that comes out slower than 5 times real time (a 90,000-word novel over 2 hours) is where thread tuning, a smaller worker count or a GPU (out of scope) would be worth a look.
 
-**Default worker count.** The default is half the cores (6 of 12 here), and **that is wasteful on this machine**: one Piper process already uses about 7 cores, the throughput stops growing at 2 to 3 sessions, and every extra worker holds a model in memory for nothing. Recommendation, not applied: make the default `min(cores / 2, 3)` (since ANO-16 that is the default of `PIPER_CONCURRENCY` in piper-api, which the app's worker count follows). It needs the owner's decision, because the right number depends on how many threads Piper is told to use (known gap below).
+**Default worker count.** The default is half the cores (6 of 12 here), and **that is wasteful on this machine**: one Piper process already uses about 7 cores, the throughput stops growing at 2 to 3 sessions, and every extra worker holds a model in memory for nothing. Recommendation, not applied: make the default `min(cores / 2, 3)`. Since ANO-16 the default is `PIPER_CONCURRENCY` in piper-api, still half the cores, and the app's worker count follows it. It needs the owner's decision, because the right number depends on how many threads Piper is told to use (known gap below).
 
 ## Known gaps
 

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ApiError } from "@/ui/shared/api/request";
 import { saveVoice, type Settings } from "@/ui/entities/settings/api";
+import { voiceNote } from "@/ui/entities/settings/voices";
 import { languageName } from "@/ui/entities/language/language-names";
 import { SettingsSection } from "./SettingsSection";
 
@@ -63,10 +64,12 @@ export function VoicesSection({ settings, onSaved }: Props) {
         converted can end up with two.
       </p>
 
-      {settings.voices.map(({ language, voice, chosen, options }) => {
+      {settings.voices.map((row) => {
+        const { language, chosen, options } = row;
         const id = `voice-${language}`;
         const fallback = options[0];
         const missing = chosen !== null && !options.some((o) => o.id === chosen);
+        const note = voiceNote(row);
         return (
           <div key={language} className="grid gap-1">
             <label htmlFor={id} className="font-serif text-[1.05rem]">
@@ -90,11 +93,7 @@ export function VoicesSection({ settings, onSaved }: Props) {
               ))}
               {missing && <option value={chosen}>{chosen} (not available now)</option>}
             </select>
-            {voice === null && (
-              <p className={LIVE}>
-                Its speech service has not answered yet; books in this language wait for it.
-              </p>
-            )}
+            {note && <p className={LIVE}>{note}</p>}
           </div>
         );
       })}

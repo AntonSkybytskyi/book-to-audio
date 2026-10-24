@@ -10,7 +10,7 @@ export const TTS_ERROR_CODES = [
 ] as const;
 /**
  * `bad_input`: this text cannot be read aloud; says nothing about the service.
- * `engine_unavailable`: the engine could not be started.
+ * `engine_unavailable`: the engine is not installed or could not be started.
  */
 export type TtsServiceErrorCode = (typeof TTS_ERROR_CODES)[number];
 
@@ -60,9 +60,16 @@ export interface TtsSynthesizeRequest {
   text: string;
 }
 
-/** `GET /health`. */
-export interface TtsHealthResponse {
-  status: "ok";
+/** `GET /health`: 200 with `ok`, or 503 with why the service cannot read text aloud now. */
+export type TtsHealthResponse = { status: "ok" } | { status: "error"; reason: string };
+
+/**
+ * A 503 from `POST /synthesize` without the error body: the service is stopping, so the client
+ * tries again later and does not count it against the text. A proxy's bare 502, 503 or 504 means
+ * the same.
+ */
+export interface TtsStoppingResponse {
+  status: "stopping";
 }
 
 export const TTS_WAV_CONTENT_TYPE = "audio/wav";

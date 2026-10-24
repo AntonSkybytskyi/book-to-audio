@@ -1,5 +1,6 @@
 import http from "node:http";
 import type { AddressInfo } from "node:net";
+import { MAX_WORKERS } from "@book-to-audio/contracts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { HttpTtsEngine } from "./http-engine.js";
 
@@ -125,6 +126,65 @@ describe("HttpTtsEngine", () => {
       handler = (_req, _body, res) => json(res, 200, { voices: [] });
       await e.refresh();
       expect(e.reachable).toBe(false);
+    });
+
+    it("keeps the path and query of the service's url", async () => {
+      handler = (req, _body, res) => {
+        if (req.url === "/tts/voices?key=1") return json(res, 200, VOICES);
+        if (req.url === "/tts/synthesize?key=1") {
+          res.writeHead(200, { "content-type": "audio/wav" });
+          return res.end(wav([1]));
+        }
+        json(res, 404, {});
+      };
+      const e = await ready({ baseUrl: `${baseUrl}/tts/?key=1` });
+
+      await (await e.open("piper:uk:lada")).synthesize("Hi.");
+
+      expect(e.reachable).toBe(true);
+      expect(requests.map((r) => r.url)).toEqual(["/tts/voices?key=1", "/tts/synthesize?key=1"]);
+    });
+
+    it("takes at most as many requests at once as the settings accept workers", async () => {
+      handler = (_req, _body, res) => json(res, 200, { ...VOICES, concurrency: 500 });
+
+      expect((await ready()).concurrency).toBe(MAX_WORKERS);
+    });
+
+    it("remembers why the service did not answer, until it answers again", async () => {
+      handler = (_req, _body, res) => json(res, 404, {});
+      const e = await ready();
+
+      expect(e.lastError).toMatchObject({ code: "synthesis_failed", detail: "HTTP 404" });
+
+      handler = (_req, _body, res) => json(res, 200, VOICES);
+      await e.refresh();
+      expect(e.lastError).toBeUndefined();
+    });
+
+    it("counts an answer as a change when a chapter found the service gone during the request", async () => {
+      const e = await ready();
+      let answer: (() => void) | undefined;
+      const asked = new Promise<void>((resolve) => {
+        handler = (req, _body, res) => {
+          if (req.url === "/voices") {
+            answer = () => json(res, 200, VOICES);
+            return resolve();
+          }
+          json(res, 503, { status: "stopping" });
+        };
+      });
+      const refreshed = e.refresh();
+      await asked;
+
+      await expect((await e.open("piper:uk:lada")).synthesize("Hi.")).rejects.toMatchObject({
+        code: "unreachable",
+      });
+      expect(e.reachable).toBe(false);
+      answer?.();
+
+      expect(await refreshed).toBe(true);
+      expect(e.reachable).toBe(true);
     });
   });
 

@@ -3,7 +3,9 @@ import {
   TTS_WAV_CONTENT_TYPE,
   type TtsServiceError,
   type TtsServiceErrorCode,
+  type TtsHealthResponse,
   type TtsServiceVoice,
+  type TtsStoppingResponse,
   type TtsSynthesizeRequest,
   type TtsVoicesResponse,
 } from "@book-to-audio/contracts";
@@ -47,11 +49,14 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     ajv: { customOptions: { coerceTypes: false, removeAdditional: false } },
   });
 
-  // Docker and the app ask these every few seconds; only failures are worth a log line.
+  // Docker asks for /health every 10 s and the app for /voices every 5 to 30 s: only failures are
+  // worth a log line.
   app.get("/health", { logLevel: "warn" }, async (_req, reply) => {
     const problem = deps.problem();
-    if (problem) return reply.code(503).send({ status: "error", reason: problem });
-    return { status: "ok" };
+    const body: TtsHealthResponse = problem
+      ? { status: "error", reason: problem }
+      : { status: "ok" };
+    return reply.code(problem ? 503 : 200).send(body);
   });
 
   app.get("/voices", { logLevel: "warn" }, async (): Promise<TtsVoicesResponse> => ({
@@ -88,7 +93,8 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
         // Cancelled while the client is still there: the service is stopping. A 503 without the API's
         // error body tells the client the service went away, so it tries again later.
         if (error instanceof TtsError && error.code === "aborted" && !controller.signal.aborted) {
-          return reply.code(503).send({ status: "stopping" });
+          const body: TtsStoppingResponse = { status: "stopping" };
+          return reply.code(503).send(body);
         }
         throw error;
       }

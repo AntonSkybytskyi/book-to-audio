@@ -9,7 +9,7 @@ Before, core ran Piper itself, with the binary and every voice model in its imag
 - `GET /health`: 200 when the service can read text aloud, 503 with a reason when not (piper-api: no voices, or no Piper binary). Docker gates core on it.
 - `GET /voices`: the voices (`id`, `language`, `name`, `sampleRate`, optional `speaker`), the service's preferred ones first, plus `maxInputChars` (longest text per request) and `concurrency` (requests it reads at once).
 - `POST /synthesize` with `{ voice, text }`: a 16-bit mono WAV. WAV rather than raw PCM because the sample rate travels with the audio and any engine can write it.
-- Errors are `{ code, message, detail? }` with one status per code: `voice_not_found` 404, `bad_input` 422, `synthesis_failed` 500, `engine_unavailable` 503, `timeout` 504. `message` can be shown to the user; `detail` is for the logs. `bad_input` (this text cannot be read) stays apart from the rest: it is not retried and does not count towards pausing the service.
+- Errors are `{ code, message, detail? }` with one status per code: `voice_not_found` 404, `bad_input` 422, `synthesis_failed` 500, `engine_unavailable` 503, `timeout` 504. `message` can be shown to the user; `detail` is for the logs. `bad_input` (this text cannot be read) stays apart from the rest: it is not retried and does not count towards pausing the service. A 503 without this body (`{ status: "stopping" }` from a service that is shutting down, or a proxy's bare 502, 503 or 504) means the service went away: the chapter waits for it instead of failing.
 - A client that hangs up cancels the work.
 
 The types are in `@book-to-audio/contracts` (`tts-service.ts`), hand-written; a test checks them against the OpenAPI file.
@@ -26,7 +26,7 @@ The types are in `@book-to-audio/contracts` (`tts-service.ts`), hand-written; a 
 
 - A group of workers per service: `workers.<service>` from the Settings page, else the service's `concurrency`, and 0 while it does not answer. A worker only claims chapters whose language is read by its service (`ChapterQueue.claimNext(languages)`), still earliest book first.
 - Three failed chapters in a row pause **that service** (`service_state`); the others carry on. A full disk still pauses everything (`pool_state`).
-- `unreachable` puts the chapter back in the queue without failing it, and the service gets no workers until it answers. `voice_not_found` fails the chapter but does not count towards the pause; it makes core ask the service for its voices again.
+- `unreachable` puts the chapter back in the queue without failing it, and the service gets no workers until it answers. A chapter that finds its service gone three times in a row fails instead, and that failure counts towards pausing the service, so a text that knocks the service over does not loop forever. `voice_not_found` fails the chapter but does not count towards the pause; it makes core ask the service for its voices again.
 - When a language's voice moves to another service, chapters already running keep their voice; the next one goes to the other service's workers.
 
 ## piper-api

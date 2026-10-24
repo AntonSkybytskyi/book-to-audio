@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { MAX_WORKERS } from "@book-to-audio/contracts";
 import { describe, expect, it } from "vitest";
 import { isExecutable } from "./binary.js";
 import { loadConfig } from "./config.js";
@@ -49,10 +50,17 @@ describe("loadConfig", () => {
     });
   });
 
+  it("uses half the cores at once, at most as many as the app runs workers", () => {
+    expect(loadConfig({}, 8).concurrency).toBe(4);
+    expect(loadConfig({}, 1).concurrency).toBe(1);
+    expect(loadConfig({}, 512).concurrency).toBe(MAX_WORKERS);
+  });
+
   it.each([
     ["PORT", "0"],
     ["PIPER_CONCURRENCY", "0"],
     ["PIPER_CONCURRENCY", "two"],
+    ["PIPER_CONCURRENCY", String(MAX_WORKERS + 1)],
     ["MAX_INPUT_CHARS", "1.5"],
   ])("rejects %s=%j", (name, value) => {
     expect(() => loadConfig({ [name]: value })).toThrow(name);
