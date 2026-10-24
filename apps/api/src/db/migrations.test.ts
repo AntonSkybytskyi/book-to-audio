@@ -328,4 +328,24 @@ describe("migration 11 (TTS services)", () => {
     ).toThrow(/CHECK/);
     db.close();
   });
+
+  it("keeps a pause for a full disk", () => {
+    const db = new Database(":memory:");
+    runMigrations(
+      db,
+      migrations.filter((m) => m.id <= 10),
+    );
+    db.prepare(
+      "UPDATE pool_state SET state = 'paused', error = 'The disk is full.', cause = 'disk'",
+    ).run();
+
+    expect(runMigrations(db, migrations)).toEqual([11]);
+
+    expect(db.prepare("SELECT state, error, cause FROM pool_state").get()).toEqual({
+      state: "paused",
+      error: "The disk is full.",
+      cause: "disk",
+    });
+    db.close();
+  });
 });

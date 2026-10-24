@@ -23,10 +23,23 @@ export interface Config {
   scratchDir: string;
 }
 
+/**
+ * Memory one Piper process is given when the default concurrency is worked out: a warm process
+ * peaks at about 0.8 GB while it reads (6 peaked at 4.9 GB in the speed test), plus room for the server.
+ */
+const MEMORY_PER_PROCESS = 1024 ** 3;
+
+/**
+ * @param memoryLimit Bytes the process may use (its container's limit), or 0 when there is none.
+ */
 export function loadConfig(
   env: Record<string, string | undefined> = process.env,
   cpus = os.availableParallelism(),
+  memoryLimit = process.constrainedMemory(),
 ): Config {
+  // Half the cores, but no more processes than the memory limit holds: one killed for memory
+  // fails its chapter, and three of those pause the service.
+  const byMemory = memoryLimit > 0 ? Math.floor(memoryLimit / MEMORY_PER_PROCESS) : Infinity;
   return {
     host: env.HOST || "127.0.0.1",
     port: parseInteger("PORT", env.PORT, 5000, 1, 65535),
@@ -35,7 +48,7 @@ export function loadConfig(
     concurrency: parseInteger(
       "PIPER_CONCURRENCY",
       env.PIPER_CONCURRENCY,
-      Math.min(MAX_WORKERS, Math.max(1, Math.floor(cpus / 2))),
+      Math.min(MAX_WORKERS, Math.max(1, Math.min(Math.floor(cpus / 2), byMemory))),
       1,
       // More is never used: the app runs at most this many workers for one service.
       MAX_WORKERS,

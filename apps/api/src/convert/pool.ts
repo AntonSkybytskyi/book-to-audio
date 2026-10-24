@@ -62,8 +62,9 @@ export class WorkerPool implements PoolControl {
   private shutdown = new AbortController();
   private unsubscribe: (() => void) | null = null;
   /**
-   * Chapters, by row id, during which their service stopped answering. A chapter that does it
-   * every time may be what knocks the service over, so it fails instead of going round forever.
+   * Chapters, by row id, during which their service stopped answering, with no new chunk saved in
+   * between. A chapter that does it every time may be what knocks the service over, so it fails
+   * instead of going round forever. A saved chunk, a success, or a cancelled attempt starts it over.
    */
   private readonly lostTo = new Map<number, number>();
   private readonly now: () => number;
@@ -356,6 +357,8 @@ export class WorkerPool implements PoolControl {
             controller.abort(); // Stale: the chapter was re-queued or taken by another worker.
             return false;
           }
+          // A new chunk got through: whatever knocked the service over before was not this chapter.
+          if (done > counts.done) this.lostTo.delete(task.id);
           // The first save of an attempt repeats what the claim already announced.
           const changed = done !== counts.done || total !== counts.total;
           counts.done = done;
@@ -443,6 +446,7 @@ export class WorkerPool implements PoolControl {
     const cancelled = signal.aborted || (failure instanceof TtsError && failure.code === "aborted");
     if (cancelled) {
       // Stopping, or replaced by a newer claim (then nothing changes). Chunks stay for the next attempt.
+      this.lostTo.delete(task.id);
       this.requeue(task, counts);
       return;
     }

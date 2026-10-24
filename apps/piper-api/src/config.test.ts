@@ -6,9 +6,13 @@ import { describe, expect, it } from "vitest";
 import { isExecutable } from "./binary.js";
 import { loadConfig } from "./config.js";
 
+/** No memory limit, as outside a container. */
+const NO_LIMIT = 0;
+const GIB = 1024 ** 3;
+
 describe("loadConfig", () => {
   it("has defaults for everything", () => {
-    expect(loadConfig({}, 8)).toMatchObject({
+    expect(loadConfig({}, 8, NO_LIMIT)).toMatchObject({
       host: "127.0.0.1",
       port: 5000,
       piperBin: "piper",
@@ -22,7 +26,7 @@ describe("loadConfig", () => {
   });
 
   it("handles at least one request at a time on a single core", () => {
-    expect(loadConfig({}, 1).concurrency).toBe(1);
+    expect(loadConfig({}, 1, NO_LIMIT).concurrency).toBe(1);
   });
 
   it("reads the environment, an empty value meaning the default", () => {
@@ -37,6 +41,7 @@ describe("loadConfig", () => {
         SCRATCH_DIR: "/tmp/piper",
       },
       8,
+      NO_LIMIT,
     );
 
     expect(config).toMatchObject({
@@ -51,9 +56,17 @@ describe("loadConfig", () => {
   });
 
   it("uses half the cores at once, at most as many as the app runs workers", () => {
-    expect(loadConfig({}, 8).concurrency).toBe(4);
-    expect(loadConfig({}, 1).concurrency).toBe(1);
-    expect(loadConfig({}, 512).concurrency).toBe(MAX_WORKERS);
+    expect(loadConfig({}, 8, NO_LIMIT).concurrency).toBe(4);
+    expect(loadConfig({}, 1, NO_LIMIT).concurrency).toBe(1);
+    expect(loadConfig({}, 512, NO_LIMIT).concurrency).toBe(MAX_WORKERS);
+  });
+
+  it("starts no more Piper processes by default than the memory limit holds", () => {
+    expect(loadConfig({}, 16, 6 * GIB).concurrency).toBe(6);
+    expect(loadConfig({}, 8, 6 * GIB).concurrency).toBe(4);
+    expect(loadConfig({}, 16, GIB / 2).concurrency).toBe(1);
+    // A number that is set is the owner's call.
+    expect(loadConfig({ PIPER_CONCURRENCY: "8" }, 16, 6 * GIB).concurrency).toBe(8);
   });
 
   it.each([

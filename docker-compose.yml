@@ -62,7 +62,8 @@ services:
       dockerfile: apps/piper-api/Dockerfile
     image: book-to-audio-piper
     environment:
-      # Requests read at once, and the most Piper processes alive; default half the CPU cores.
+      # Requests read at once, and the most Piper processes alive; default half the CPU cores, at
+      # most one per GB of mem_limit below.
       PIPER_CONCURRENCY: ${PIPER_CONCURRENCY:-}
     restart: unless-stopped
     # Reap Piper processes.

@@ -24,20 +24,6 @@ export function PoolBanner() {
   const [failure, setFailure] = useState<string | null>(null);
 
   if (!pool) return null;
-  if (pool.held && pool.state !== "paused") {
-    return (
-      <section className={cx(BANNER, "border-l-accent")} role="status">
-        <div className={INNER}>
-          <p className={TEXT}>
-            <strong>Measuring how fast this computer reads aloud.</strong>{" "}
-            {pool.activeWorkers > 0
-              ? "Chapters that are already being read finish first; conversion carries on as soon as the speed test is done, which takes a few minutes at most."
-              : "No chapter is being read now. Conversion carries on as soon as the speed test is done, which takes a few minutes at most."}
-          </p>
-        </div>
-      </section>
-    );
-  }
 
   /** `ALL` resumes everything; a service name only that service. */
   const resume = async (what: string) => {
@@ -85,10 +71,23 @@ export function PoolBanner() {
   const silent = pool.services.filter(
     (service) => service.state !== "paused" && !service.reachable,
   );
-  if (paused.length === 0 && silent.length === 0) return null;
+  if (!pool.held && paused.length === 0 && silent.length === 0) return null;
 
+  // A paused or silent service stays in view during the speed test: it does not end with the test.
   return (
     <>
+      {pool.held && (
+        <section className={cx(BANNER, "border-l-accent")} role="status">
+          <div className={INNER}>
+            <p className={TEXT}>
+              <strong>Measuring how fast this computer reads aloud.</strong>{" "}
+              {pool.activeWorkers > 0
+                ? "Chapters that are already being read finish first; conversion carries on as soon as the speed test is done, which takes a few minutes at most."
+                : "No chapter is being read now. Conversion carries on as soon as the speed test is done, which takes a few minutes at most."}
+            </p>
+          </div>
+        </section>
+      )}
       {paused.map((service) => (
         <section
           key={service.id}

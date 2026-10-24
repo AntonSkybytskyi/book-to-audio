@@ -146,11 +146,48 @@ describe("WorkerPool: several TTS services", () => {
     await until(() => h.bookStatus(en) === "done");
   });
 
-  it("fails a chapter whose service stops answering every time it reads it", async () => {
+  it("gives a service its workers again once the catalog hears from it", async () => {
+    /** A service that answers the catalog only when told to. */
+    class SometimesThere extends FakeEngine {
+      answers = false;
+      override reachable = false;
+      async refresh(): Promise<boolean> {
+        const changed = this.reachable !== this.answers;
+        this.reachable = this.answers;
+        return changed;
+      }
+    }
+    const engine = new SometimesThere({
+      id: "piper",
+      concurrency: 2,
+      voices: [voice("piper:en", "en")],
+    });
+    const catalog = new TtsCatalog([engine]);
+    const pool = start(catalog);
+    const en = h.addBook(1, true, "en");
+    pool.notify();
+    await tick();
+
+    expect(pool.status().services[0]).toMatchObject({ workers: 0, reachable: false });
+    expect(h.status(en, 1)).toBe("queued");
+
+    // Only the catalog learns that the service is back: the pool must follow it on its own.
+    engine.answers = true;
+    await catalog.refresh();
+
+    await until(() => h.gates.open.length === 1);
+    expect(pool.status().services[0]).toMatchObject({ workers: 2, reachable: true });
+    h.gates.releaseAll();
+    await until(() => h.bookStatus(en) === "done");
+  });
+
+  it("fails a chapter after its service stops answering three times while reading it", async () => {
+    let attempts = 0;
     const pool = start(
       services(1, 1),
       stubConverter(async (run) => {
         if (run.task.position === 1) {
+          attempts++;
           throw new TtsError("unreachable", 'The speech service "piper" is not reachable.');
         }
         return ok(run);
@@ -161,9 +198,52 @@ describe("WorkerPool: several TTS services", () => {
 
     await until(() => h.status(en, 1) === "failed" && h.status(en, 2) === "done");
 
+    expect(attempts).toBe(3);
     expect(h.repo.chapter(en, 1)?.error).toBe(
       'The speech service "piper" stopped answering each time it read this chapter.',
     );
+  });
+
+  it("starts counting again when a chapter saves a new chunk between two outages", async () => {
+    let attempts = 0;
+    const pool = start(
+      services(1, 1),
+      stubConverter(async (run) => {
+        attempts++;
+        if (attempts <= 5) {
+          // Each attempt gets one chunk further before the service goes away.
+          run.saveProgress(run.task.chunksDone, 10);
+          run.saveProgress(run.task.chunksDone + 1, 10);
+          throw new TtsError("unreachable", 'The speech service "piper" is not reachable.');
+        }
+        return ok(run);
+      }),
+    );
+    const en = h.addBook(1, true, "en");
+    pool.notify();
+
+    await until(() => h.bookStatus(en) === "done");
+    expect(attempts).toBe(6);
+  });
+
+  it("pauses a service that every chapter knocks over, instead of failing its whole queue", async () => {
+    const pool = start(
+      services(1, 1),
+      stubConverter(async () => {
+        throw new TtsError("unreachable", 'The speech service "piper" is not reachable.');
+      }),
+    );
+    const en = h.addBook(4, true, "en");
+    pool.notify();
+
+    await until(() => pool.status().services[0]?.state === "paused");
+
+    expect([1, 2, 3].map((position) => h.status(en, position))).toEqual([
+      "failed",
+      "failed",
+      "failed",
+    ]);
+    expect(h.status(en, 4)).toBe("queued");
   });
 
   it("leaves chapters with no voice anywhere queued, and still counts as idle", async () => {
