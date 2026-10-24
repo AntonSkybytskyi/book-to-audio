@@ -175,7 +175,12 @@ async function main() {
     app.log.info("the text rules changed: counting the prepared text of unfinished books again");
   }
   counter.backfill();
-  if (benchmark.startIfNeeded()) app.log.info("a speed test will run once nothing is being read");
+  const startSpeedTest = () => {
+    if (benchmark.startIfNeeded()) app.log.info("a speed test will run once nothing is being read");
+  };
+  startSpeedTest();
+  // A service that answers later, or with other voices, may have voices nobody measured yet.
+  catalog.onChange(startSpeedTest);
   const services = pool
     .status()
     .services.map((s) => `${s.id} (${s.reachable ? `${s.workers} workers` : "not answering"})`);

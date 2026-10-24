@@ -81,8 +81,17 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
       reply.raw.once("close", () => {
         if (!reply.raw.writableFinished) controller.abort();
       });
-      const audio = await deps.pool.synthesize(req.body.voice, req.body.text, controller.signal);
-      return reply.header("content-type", TTS_WAV_CONTENT_TYPE).send(encodeWav(audio));
+      try {
+        const audio = await deps.pool.synthesize(req.body.voice, req.body.text, controller.signal);
+        return reply.header("content-type", TTS_WAV_CONTENT_TYPE).send(encodeWav(audio));
+      } catch (error) {
+        // Cancelled while the client is still there: the service is stopping. A 503 without the API's
+        // error body tells the client the service went away, so it tries again later.
+        if (error instanceof TtsError && error.code === "aborted" && !controller.signal.aborted) {
+          return reply.code(503).send({ status: "stopping" });
+        }
+        throw error;
+      }
     },
   );
 

@@ -186,6 +186,19 @@ describe("HttpTtsEngine", () => {
       });
     });
 
+    it("takes a gateway error for a service that is gone until it answers again", async () => {
+      const e = await ready();
+      handler = (_req, _body, res) => {
+        res.writeHead(503);
+        res.end();
+      };
+
+      await expect((await e.open("piper:uk:lada")).synthesize("Hi.")).rejects.toMatchObject({
+        code: "unreachable",
+      });
+      expect(e.reachable).toBe(false);
+    });
+
     it("refuses audio that is not a WAV", async () => {
       const e = await ready();
       handler = (_req, _body, res) => {

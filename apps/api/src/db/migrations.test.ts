@@ -301,12 +301,20 @@ describe("migration 11 (TTS services)", () => {
     db.prepare(
       "INSERT INTO settings (key, value) VALUES ('workers', '3'), ('shown_languages', '[\"en\"]')",
     ).run();
+    db.prepare(
+      "UPDATE pool_state SET state = 'paused', error = 'Broken.', cause = 'failures'",
+    ).run();
 
     expect(runMigrations(db, migrations)).toEqual([11]);
 
     expect(db.prepare("SELECT COUNT(*) FROM benchmark_results").pluck().get()).toBe(0);
     expect(db.prepare("SELECT COUNT(*) FROM speed_learning").pluck().get()).toBe(0);
     expect(db.prepare("SELECT key FROM settings").pluck().all()).toEqual(["shown_languages"]);
+    expect(db.prepare("SELECT state, error, cause FROM pool_state").get()).toEqual({
+      state: "running",
+      error: null,
+      cause: null,
+    });
     db.prepare("INSERT INTO service_state (service) VALUES ('piper')").run();
     expect(
       db.prepare("SELECT state, error, consecutive_failures FROM service_state").get(),

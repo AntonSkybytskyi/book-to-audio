@@ -114,6 +114,29 @@ describe("TtsCatalog", () => {
     expect(changed).toHaveBeenCalledTimes(2); // answered, then stopped answering
   });
 
+  it("keeps polling when a listener fails, and asks a service again soon when told it went away", async () => {
+    vi.useFakeTimers();
+    try {
+      const remote = new Remote({ id: "remote" });
+      const catalog = new TtsCatalog([remote], { pollMs: 1000, downPollMs: 100 });
+      catalog.onChange(() => {
+        throw new Error("listener broke");
+      });
+      catalog.start();
+      await vi.advanceTimersByTimeAsync(100); // answers: a change, and the listener throws
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(remote.refresh).toHaveBeenCalledTimes(2);
+
+      remote.reachable = false; // a request found it gone
+      catalog.checkSoon("remote");
+      await vi.advanceTimersByTimeAsync(100);
+      expect(remote.refresh).toHaveBeenCalledTimes(3);
+      catalog.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps polling: often while a service is down, rarely once it answers", async () => {
     vi.useFakeTimers();
     try {

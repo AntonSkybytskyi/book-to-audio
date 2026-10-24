@@ -7,6 +7,7 @@ export interface CatalogVoice extends Voice {
 
 export interface CatalogLogger {
   info(message: string): void;
+  error?(context: object, message: string): void;
 }
 
 export interface TtsCatalogOptions {
@@ -130,15 +131,29 @@ export class TtsCatalog {
     this.timers.clear();
   }
 
+  /**
+   * Asks the engine again after the short delay of a service that is down, not straight away: for
+   * when a request just found it gone, so its chapters wait a moment instead of trying at once.
+   */
+  checkSoon(engineId: string): void {
+    const engine = this.engine(engineId);
+    if (!this.running || !engine || !refreshable(engine)) return;
+    this.schedule(engine);
+  }
+
   private schedule(engine: TtsEngine): void {
+    clearTimeout(this.timers.get(engine.id));
     const delay = engine.reachable
       ? (this.options.pollMs ?? 30_000)
       : (this.options.downPollMs ?? 5000);
     const timer = setTimeout(() => {
-      void this.refreshOne(engine).then((changed) => {
-        if (changed) this.changed();
-        if (this.running) this.schedule(engine);
-      });
+      void this.refreshOne(engine)
+        .then((changed) => {
+          if (changed) this.changed();
+        })
+        .finally(() => {
+          if (this.running) this.schedule(engine);
+        });
     }, delay);
     timer.unref();
     this.timers.set(engine.id, timer);
@@ -157,6 +172,12 @@ export class TtsCatalog {
   }
 
   private changed(): void {
-    for (const listener of this.listeners) listener();
+    for (const listener of this.listeners) {
+      try {
+        listener();
+      } catch (error) {
+        this.options.logger?.error?.({ err: error }, "a listener of the TTS catalog failed");
+      }
+    }
   }
 }

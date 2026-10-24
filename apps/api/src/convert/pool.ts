@@ -12,6 +12,9 @@ import { sleep } from "./retry.js";
 import { SessionHolder } from "./sessions.js";
 import { workerTarget } from "./worker-target.js";
 
+/** Times in a row a chapter's service may stop answering while reading it before the chapter fails. */
+const UNREACHABLE_LIMIT = 3;
+
 /** The workers of one TTS service. */
 interface Group {
   engine: TtsEngine;
@@ -58,6 +61,11 @@ export class WorkerPool implements PoolControl {
   private paused = false;
   private shutdown = new AbortController();
   private unsubscribe: (() => void) | null = null;
+  /**
+   * Chapters, by row id, during which their service stopped answering. A chapter that does it
+   * every time may be what knocks the service over, so it fails instead of going round forever.
+   */
+  private readonly lostTo = new Map<number, number>();
   private readonly now: () => number;
   /** Counts the times the pool was held, released or resumed: a chapter that saw one is no measure of speed. */
   private disturbances = 0;
@@ -412,6 +420,7 @@ export class WorkerPool implements PoolControl {
     if (converted) {
       if (queue.markDone(task, converted.audioPath, converted.durationSeconds)) {
         converter.discardChunks(task);
+        this.lostTo.delete(task.id);
         state.recordSuccess(service);
         recordTiming(this.deps, service, task, converted, timing);
         this.events.publish({
@@ -438,15 +447,19 @@ export class WorkerPool implements PoolControl {
       return;
     }
 
-    if (failure instanceof TtsError && failure.code === "unreachable") {
+    const unreachable = failure instanceof TtsError && failure.code === "unreachable";
+    const lost = unreachable ? (this.lostTo.get(task.id) ?? 0) + 1 : 0;
+    if (unreachable && lost < UNREACHABLE_LIMIT) {
       // The service is down, not the chapter's fault: it waits for the service, which gets no workers
-      // until it answers again.
+      // until it answers again, and is asked again in a few seconds.
       logger?.warn({ detail: failure.detail, ...where }, "the TTS service does not answer");
+      this.lostTo.set(task.id, lost);
       this.requeue(task, counts);
       this.refreshWorkers();
-      void catalog.refresh(service);
+      catalog.checkSoon(service);
       return;
     }
+    this.lostTo.delete(task.id);
 
     if (failure instanceof DiskFullError) {
       // Not the chapter's fault: keep it and its chunks, and stop taking work until there is room.
@@ -460,15 +473,20 @@ export class WorkerPool implements PoolControl {
       { err: failure, detail: (failure as UserFacingError | null)?.detail, ...where },
       "chapter failed",
     );
-    const message = failure instanceof UserFacingError ? failure.message : GENERIC_CHAPTER_ERROR;
+    const message = unreachable
+      ? `The speech service "${service}" stopped answering each time it read this chapter.`
+      : failure instanceof UserFacingError
+        ? failure.message
+        : GENERIC_CHAPTER_ERROR;
     // The finished chunks stay, so running the chapter again can continue from them.
     if (!queue.markFailed(task, message)) return;
     publishFailure(this.deps, this.events, task, counts, message);
     // Text that cannot be read says nothing about the service, and a voice that went away only
     // means the service's voice list changed, so neither counts towards pausing it. Everything else
     // (a crash, a timeout, a missing binary) does.
-    if (failure instanceof TtsError && failure.code === "voice_not_found")
-      void catalog.refresh(service);
+    if (failure instanceof TtsError && failure.code === "voice_not_found") {
+      catalog.checkSoon(service);
+    }
     if (
       failure instanceof TtsError &&
       (failure.code === "bad_input" || failure.code === "voice_not_found")

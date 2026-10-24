@@ -146,6 +146,26 @@ describe("WorkerPool: several TTS services", () => {
     await until(() => h.bookStatus(en) === "done");
   });
 
+  it("fails a chapter whose service stops answering every time it reads it", async () => {
+    const pool = start(
+      services(1, 1),
+      stubConverter(async (run) => {
+        if (run.task.position === 1) {
+          throw new TtsError("unreachable", 'The speech service "piper" is not reachable.');
+        }
+        return ok(run);
+      }),
+    );
+    const en = h.addBook(2, true, "en");
+    pool.notify();
+
+    await until(() => h.status(en, 1) === "failed" && h.status(en, 2) === "done");
+
+    expect(h.repo.chapter(en, 1)?.error).toBe(
+      'The speech service "piper" stopped answering each time it read this chapter.',
+    );
+  });
+
   it("leaves chapters with no voice anywhere queued, and still counts as idle", async () => {
     const pool = start(services(1, 1));
     const de = h.addBook(1, true, "de");

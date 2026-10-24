@@ -40,14 +40,16 @@ export class SynthesisPool {
   /** Oldest first. */
   private idle: Idle[] = [];
   private readonly busy = new Set<Session>();
+  /** Sessions being started right now. */
+  private opening = 0;
   private readonly closing = new Set<Promise<void>>();
   private closed = false;
 
   constructor(private readonly options: SynthesisPoolOptions) {}
 
-  /** Sessions alive right now, busy or idle. */
+  /** Sessions alive right now, busy, idle or starting. */
   get sessions(): number {
-    return this.busy.size + this.idle.length;
+    return this.busy.size + this.idle.length + this.opening;
   }
 
   async synthesize(voiceId: string, text: string, signal?: AbortSignal): Promise<PcmAudio> {
@@ -132,15 +134,23 @@ export class SynthesisPool {
   }
 
   private async openSession(voiceId: string): Promise<Session> {
-    // This request holds a slot, so at most `concurrency - 1` sessions are busy and one is idle.
-    if (this.sessions >= this.options.concurrency) {
+    // This request holds a slot, so the other slots hold at most `concurrency - 1` sessions (busy or
+    // starting) and the rest are idle: closing idle ones always makes room.
+    const closing: Promise<void>[] = [];
+    while (this.sessions >= this.options.concurrency) {
       const oldest = this.idle.shift();
-      if (oldest) {
-        clearTimeout(oldest.timer);
-        this.closeSession(oldest.session);
-      }
+      if (!oldest) break;
+      clearTimeout(oldest.timer);
+      closing.push(this.closeSession(oldest.session));
     }
-    return this.options.open(voiceId);
+    this.opening++;
+    try {
+      // The old process is gone before the new one loads its model, so memory never holds more.
+      await Promise.all(closing);
+      return await this.options.open(voiceId);
+    } finally {
+      this.opening--;
+    }
   }
 
   private park(voiceId: string, session: Session): void {
@@ -156,11 +166,12 @@ export class SynthesisPool {
     this.idle.push({ voiceId, session, timer });
   }
 
-  private closeSession(session: Session): void {
+  private closeSession(session: Session): Promise<void> {
     const closing = session
       .close()
       .catch(() => {})
       .finally(() => this.closing.delete(closing));
     this.closing.add(closing);
+    return closing;
   }
 }

@@ -98,6 +98,16 @@ describe("the TTS service API", () => {
     expect(response.json()).toMatchObject({ code: "bad_input" });
   });
 
+  it("answers 503 without an error code when it stops while the client still waits", async () => {
+    const response = synthesize({ voice: VOICE, text: "HANG" });
+    await vi.waitFor(() => expect(fixture.starts()).toHaveLength(1));
+
+    await pool.close();
+
+    expect((await response).statusCode).toBe(503);
+    expect((await response).json()).toEqual({ status: "stopping" });
+  });
+
   it("keeps stderr in the detail, out of the message", async () => {
     const response = await synthesize({ voice: VOICE, text: "CRASH" });
 

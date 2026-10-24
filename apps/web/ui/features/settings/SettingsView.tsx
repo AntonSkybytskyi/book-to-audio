@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ApiError } from "@/ui/shared/api/request";
 import { getSettings, saveShownLanguages, type Settings } from "@/ui/entities/settings/api";
 import { type Language } from "@/ui/entities/language/api";
 import { languageName } from "@/ui/entities/language/language-names";
 import { ALL_LANGUAGES, languageSettingsMessage } from "@/ui/entities/language/language-picker";
+import { usePool } from "@/ui/entities/pool/use-pool";
 import { useLiveQuery } from "@/ui/shared/api/use-live-query";
 import { LoadState } from "@/ui/shared/ui/LoadState";
 import { Page } from "@/ui/shared/ui/Page";
@@ -26,7 +27,15 @@ export function SettingsView() {
     data: settings,
     error,
     setData,
+    refresh,
   } = useLiveQuery<Settings>({ key: ["settings"], load, keepPolling: never, intervalMs: 5000 });
+  // Whether each speech service answers, what it reports and its voices come with the settings:
+  // load them again when the live pool says a service came, went or changed its number.
+  const pool = usePool();
+  const services = pool?.services.map((s) => `${s.id}:${s.reachable}:${s.reportedWorkers}`).join();
+  useEffect(() => {
+    if (services !== undefined) refresh();
+  }, [services, refresh]);
   const [saving, setSaving] = useState(false);
   const [languageStatus, setLanguageStatus] = useState<{ text: string; failed: boolean } | null>(
     null,

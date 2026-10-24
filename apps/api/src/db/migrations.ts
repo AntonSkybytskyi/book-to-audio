@@ -241,6 +241,9 @@ export const migrations: Migration[] = [
       DELETE FROM speed_learning;
       -- The worker count is now per service (key workers.<service>), defaulting to what the service reports.
       DELETE FROM settings WHERE key = 'workers';
+      -- pool_state now only pauses for a full disk; a pause for failed chapters is per service.
+      UPDATE pool_state SET state = 'running', error = NULL, cause = NULL, consecutive_failures = 0
+        WHERE cause = 'failures';
 
       -- Whether each TTS service's workers take work: three of its chapters failing in a row pause
       -- that service only. A service without a row is running. pool_state keeps the disk pause.

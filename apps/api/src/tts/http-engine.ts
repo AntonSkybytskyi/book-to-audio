@@ -309,6 +309,8 @@ export class HttpTtsEngine implements TtsEngine {
       // Not the API's error body; the status says what it can.
     }
     if ([502, 503, 504].includes(response.status)) {
+      // A proxy in front of the service, or a service that is stopping: it is not there to read.
+      this.reachable = false;
       return new TtsError("unreachable", this.unreachableMessage(), { detail });
     }
     return new TtsError(

@@ -109,6 +109,23 @@ describe("SynthesisPool", () => {
     expect(pool.sessions).toBe(2);
   });
 
+  it("counts sessions that are still starting, so two new voices at once do not pass the limit", async () => {
+    const f = make(2);
+    const en = pool.synthesize("en", "x");
+    await f.finish();
+    await en;
+
+    const uk = pool.synthesize("uk", "x");
+    const ru = pool.synthesize("ru", "x");
+    await vi.waitFor(() => expect(f.pending).toHaveLength(2));
+
+    expect(f.sessions.filter((s) => !s.closed)).toHaveLength(2);
+    await f.finish();
+    await f.finish();
+    await Promise.all([uk, ru]);
+    expect(pool.sessions).toBe(2);
+  });
+
   it("drops a waiting request whose client went away", async () => {
     const f = make(1);
     const first = pool.synthesize("en", "first");
