@@ -53,7 +53,7 @@ Settings of core come from environment variables (in Docker, set them on the `co
 | `ALLOWED_HOSTS`      | —                     | Extra host names the app answers to, comma separated. `localhost`, `127.0.0.1` and `[::1]` always work |
 | `MIN_FREE_DISK_MB`   | `500`                 | Conversion pauses (banner, Resume) when less than this is free on the disk that holds `DATA_DIR` |
 
-Settings of piper-api (set them on the `piper-api` service):
+Settings of piper-api (set them on the `piper-api` service). `PIPER_MEM_LIMIT` (default `6g`) is the memory limit of its container in `docker-compose.yml`: each Piper process holds its voice model, up to about 0.8 GB while it reads (6 processes peaked at 4.9 GB in the speed test), so raise it, or lower `PIPER_CONCURRENCY`, on a machine with more than 12 cores. A Piper process killed for memory shows up as "The speech engine stopped unexpectedly".
 
 | Variable                 | Default               | Meaning                                                                                  |
 | ------------------------ | --------------------- | ---------------------------------------------------------------------------------------- |

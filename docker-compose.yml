@@ -70,8 +70,9 @@ services:
     read_only: true
     tmpfs:
       - /tmp
-    # Each warm Piper process holds its voice model in memory.
-    mem_limit: 3g
+    # Each warm Piper process holds its voice model in memory, up to about 0.8 GB while it reads:
+    # 6 processes (PIPER_CONCURRENCY on 12 cores) peaked at 4.9 GB in the speed test.
+    mem_limit: ${PIPER_MEM_LIMIT:-6g}
     pids_limit: 512
     cap_drop: [ALL]
     security_opt:
